@@ -1,6 +1,7 @@
 import dataclasses
+import math
 
-from safety_controller_layer.control_math import ControllerParams
+from safety_controller_layer.control_math import ControllerParams, wrap_angle
 
 
 def test_controller_params_defaults_match_spec():
@@ -19,3 +20,19 @@ def test_controller_params_is_immutable():
     except dataclasses.FrozenInstanceError:
         return
     raise AssertionError("ControllerParams should be frozen")
+
+
+def test_wrap_angle_within_range_unchanged():
+    assert wrap_angle(0.0) == 0.0
+    assert wrap_angle(1.0) == 1.0
+    assert wrap_angle(-1.0) == -1.0
+
+
+def test_wrap_angle_handles_full_rotation():
+    assert math.isclose(wrap_angle(2 * math.pi), 0.0, abs_tol=1e-9)
+    assert math.isclose(wrap_angle(-2 * math.pi), 0.0, abs_tol=1e-9)
+
+
+def test_wrap_angle_picks_short_path_past_pi():
+    # 3*pi/2 (270 deg) should wrap to -pi/2 (-90 deg) — go the short way
+    assert math.isclose(wrap_angle(3 * math.pi / 2), -math.pi / 2, abs_tol=1e-9)

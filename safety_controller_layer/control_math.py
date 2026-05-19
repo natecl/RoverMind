@@ -13,3 +13,8 @@ class ControllerParams:
     timeout_safety_margin_s: float = 2.0
     min_timeout_s: float = 1.0
     max_timeout_s: float = 30.0
+
+
+def wrap_angle(rad: float) -> float:
+    """Wrap an angle in radians to the range [-pi, pi)."""
+    return ((rad + math.pi) % (2 * math.pi)) - math.pi
