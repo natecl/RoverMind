@@ -36,6 +36,12 @@ def rotate_timeout_seconds(heading_delta_rad: float, params: ControllerParams) -
     return max(params.min_timeout_s, min(params.max_timeout_s, budget))
 
 
+def drive_timeout_seconds(distance_m: float, params: ControllerParams) -> float:
+    nominal = abs(distance_m) / params.max_linear if params.max_linear > 0 else params.max_timeout_s
+    budget = nominal + params.timeout_safety_margin_s
+    return max(params.min_timeout_s, min(params.max_timeout_s, budget))
+
+
 class SafetyController:
     def __init__(
         self,
@@ -72,6 +78,25 @@ class SafetyController:
                 )
             angular = proportional_turn(error, params)
             self._publish(0.0, angular)
+            self._sleep(period)
+
+    def drive_distance(self, distance_m: float) -> None:
+        params = self.params
+        period = 1.0 / params.loop_rate_hz
+        start_xy = self._get_position()
+        deadline = self._now() + drive_timeout_seconds(distance_m, params)
+        while True:
+            traveled = displacement(start_xy, self._get_position())
+            if traveled >= distance_m:
+                self._publish(0.0, 0.0)
+                return
+            if self._now() >= deadline:
+                self._publish(0.0, 0.0)
+                raise ControllerTimeoutError(
+                    f"drive_distance did not converge within budget "
+                    f"(target_distance={distance_m:.3f} m)"
+                )
+            self._publish(params.max_linear, 0.0)
             self._sleep(period)
 
 
