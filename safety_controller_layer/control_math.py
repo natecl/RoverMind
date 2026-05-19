@@ -99,6 +99,10 @@ class SafetyController:
             self._publish(params.max_linear, 0.0)
             self._sleep(period)
 
+    def execute_command(self, heading_degree: float, distance_m: float) -> None:
+        self.rotate_to_heading(math.radians(heading_degree))
+        self.drive_distance(distance_m)
+
 
 def displacement(start_xy: Tuple[float, float], current_xy: Tuple[float, float]) -> float:
     """Euclidean distance between two 2D points."""

@@ -177,3 +177,59 @@ def test_drive_distance_publishes_stop_before_raising_on_timeout():
     with pytest.raises(ControllerTimeoutError):
         controller.drive_distance(1.0)
     assert world.published[-1] == (0.0, 0.0)
+
+
+class FullWorld(FakeWorld):
+    """Rotates during turn phase, drives along current yaw during drive phase."""
+
+    def sleep(self, seconds):
+        last_linear, last_angular = self.published[-1] if self.published else (0.0, 0.0)
+        self.yaw += last_angular * seconds
+        x, y = self.position
+        self.position = (
+            x + last_linear * math.cos(self.yaw) * seconds,
+            y + last_linear * math.sin(self.yaw) * seconds,
+        )
+        self.time += seconds
+
+
+def test_execute_command_rotates_then_drives():
+    world = FullWorld()
+    controller = _make_controller(world)
+    controller.execute_command(heading_degree=90.0, distance_m=1.0)
+    assert abs(math.radians(90) - world.yaw) < ControllerParams().heading_tolerance_rad
+    assert math.hypot(world.position[0], world.position[1]) >= 1.0
+
+
+def test_execute_command_publishes_stop_between_phases():
+    world = FullWorld()
+    controller = _make_controller(world)
+    controller.execute_command(heading_degree=45.0, distance_m=0.5)
+    assert world.published[-1] == (0.0, 0.0)
+    drive_start_idx = next(
+        (i for i, (lin, _) in enumerate(world.published) if lin > 0.0),
+        None,
+    )
+    assert drive_start_idx is not None
+    assert world.published[drive_start_idx - 1] == (0.0, 0.0)
+
+
+def test_execute_command_zero_zero_is_double_stop():
+    world = FullWorld()
+    controller = _make_controller(world)
+    controller.execute_command(heading_degree=0.0, distance_m=0.0)
+    assert world.published == [(0.0, 0.0), (0.0, 0.0)]
+
+
+def test_execute_command_propagates_rotate_timeout():
+    world = StuckYawWorld()
+    controller = _make_controller(world)
+    with pytest.raises(ControllerTimeoutError):
+        controller.execute_command(heading_degree=30.0, distance_m=1.0)
+
+
+def test_execute_command_negative_heading_turns_other_way():
+    world = FullWorld()
+    controller = _make_controller(world)
+    controller.execute_command(heading_degree=-45.0, distance_m=0.0)
+    assert abs(math.radians(-45) - world.yaw) < ControllerParams().heading_tolerance_rad
