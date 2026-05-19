@@ -155,3 +155,25 @@ def test_drive_distance_overshoot_bounded_by_one_tick():
     max_overshoot = p.max_linear * (1.0 / p.loop_rate_hz)
     traveled = math.hypot(world.position[0], world.position[1])
     assert traveled - 1.0 < max_overshoot + 1e-9
+
+
+class StuckOdomWorld(FakeWorld):
+    """Odom is frozen — position never updates regardless of commanded velocity."""
+
+    def sleep(self, seconds):
+        self.time += seconds  # advance clock, do NOT update position
+
+
+def test_drive_distance_raises_on_timeout():
+    world = StuckOdomWorld()
+    controller = _make_controller(world)
+    with pytest.raises(ControllerTimeoutError):
+        controller.drive_distance(1.0)
+
+
+def test_drive_distance_publishes_stop_before_raising_on_timeout():
+    world = StuckOdomWorld()
+    controller = _make_controller(world)
+    with pytest.raises(ControllerTimeoutError):
+        controller.drive_distance(1.0)
+    assert world.published[-1] == (0.0, 0.0)
