@@ -24,3 +24,35 @@ def proportional_turn(error_rad: float, params: ControllerParams) -> float:
     """P-controller output for heading, clamped to +/- max_angular."""
     raw = params.heading_kp * error_rad
     return max(-params.max_angular, min(params.max_angular, raw))
+
+
+class SafetyController:
+    def __init__(
+        self,
+        params: ControllerParams,
+        get_yaw: Callable[[], float],
+        get_position: Callable[[], Tuple[float, float]],
+        publish_twist: Callable[[float, float], None],
+        sleep: Callable[[float], None],
+        now: Callable[[], float],
+    ):
+        self.params = params
+        self._get_yaw = get_yaw
+        self._get_position = get_position
+        self._publish = publish_twist
+        self._sleep = sleep
+        self._now = now
+
+    def rotate_to_heading(self, heading_delta_rad: float) -> None:
+        params = self.params
+        period = 1.0 / params.loop_rate_hz
+        start_yaw = self._get_yaw()
+        target_yaw = start_yaw + heading_delta_rad
+        while True:
+            error = wrap_angle(target_yaw - self._get_yaw())
+            if abs(error) < params.heading_tolerance_rad:
+                self._publish(0.0, 0.0)
+                return
+            angular = proportional_turn(error, params)
+            self._publish(0.0, angular)
+            self._sleep(period)
