@@ -1,7 +1,7 @@
 import dataclasses
 import math
 
-from safety_controller_layer.control_math import ControllerParams, wrap_angle
+from safety_controller_layer.control_math import ControllerParams, proportional_turn, wrap_angle
 
 
 def test_controller_params_defaults_match_spec():
@@ -36,3 +36,25 @@ def test_wrap_angle_handles_full_rotation():
 def test_wrap_angle_picks_short_path_past_pi():
     # 3*pi/2 (270 deg) should wrap to -pi/2 (-90 deg) — go the short way
     assert math.isclose(wrap_angle(3 * math.pi / 2), -math.pi / 2, abs_tol=1e-9)
+
+
+def test_proportional_turn_sign_matches_error():
+    p = ControllerParams()
+    assert proportional_turn(error_rad=0.5, params=p) > 0
+    assert proportional_turn(error_rad=-0.5, params=p) < 0
+
+
+def test_proportional_turn_clamps_to_max_angular():
+    p = ControllerParams(max_angular=0.5, heading_kp=1.0)
+    assert proportional_turn(error_rad=10.0, params=p) == 0.5
+    assert proportional_turn(error_rad=-10.0, params=p) == -0.5
+
+
+def test_proportional_turn_unclamped_in_linear_region():
+    p = ControllerParams(max_angular=0.5, heading_kp=1.0)
+    assert math.isclose(proportional_turn(error_rad=0.2, params=p), 0.2)
+
+
+def test_proportional_turn_respects_higher_kp():
+    p = ControllerParams(max_angular=10.0, heading_kp=2.0)
+    assert math.isclose(proportional_turn(error_rad=0.5, params=p), 1.0)

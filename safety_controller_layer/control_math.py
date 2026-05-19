@@ -18,3 +18,9 @@ class ControllerParams:
 def wrap_angle(rad: float) -> float:
     """Wrap an angle in radians to the range [-pi, pi)."""
     return ((rad + math.pi) % (2 * math.pi)) - math.pi
+
+
+def proportional_turn(error_rad: float, params: ControllerParams) -> float:
+    """P-controller output for heading, clamped to +/- max_angular."""
+    raw = params.heading_kp * error_rad
+    return max(-params.max_angular, min(params.max_angular, raw))
