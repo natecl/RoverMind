@@ -5,6 +5,10 @@ heading change (degrees) and a forward distance (metres). The server turns the
 rover to the new heading then drives it forward, publishing /cmd_vel throughout
 and emitting "rotating" / "driving" feedback.
 
+A goal can be cancelled mid-maneuver: the controller's should_abort hook polls
+the active goal handle's cancel flag on every ~20 Hz control tick, stops the
+rover, and reports the goal as canceled.
+
 Subscribes /imu (sensor_msgs/Imu) and /odom (nav_msgs/Odometry), publishes
 /cmd_vel (geometry_msgs/Twist).
 
@@ -26,7 +30,7 @@ import time
 from typing import Optional, Tuple
 
 import rclpy
-from rclpy.action import ActionServer
+from rclpy.action import ActionServer, CancelResponse
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
@@ -35,6 +39,7 @@ from nav_msgs.msg import Odometry
 from sensor_msgs.msg import Imu
 
 from safety_controller_layer.control_math import (
+    ControllerCancelledError,
     ControllerParams,
     ControllerTimeoutError,
     SafetyController,
@@ -67,6 +72,9 @@ class SafetyControllerNode(Node):
         self._params = params or ControllerParams()
         self._latest_yaw: Optional[float] = None
         self._latest_xy: Optional[Tuple[float, float]] = None
+        # Set while a goal is executing; the should_abort hook polls its
+        # cancel flag. None when idle.
+        self._active_goal_handle = None
 
         # A ReentrantCallbackGroup lets the IMU/odom subscription callbacks run
         # on other MultiThreadedExecutor threads while the action callback is
@@ -89,6 +97,7 @@ class SafetyControllerNode(Node):
             publish_twist=self._publish_twist,
             sleep=time.sleep,
             now=time.monotonic,
+            should_abort=self._is_cancel_requested,
         )
 
         self._action_server = ActionServer(
@@ -96,6 +105,7 @@ class SafetyControllerNode(Node):
             ExecuteCommand,
             ACTION_NAME,
             execute_callback=self._execute_callback,
+            cancel_callback=self._cancel_callback,
             callback_group=self._callback_group,
         )
 
@@ -123,9 +133,27 @@ class SafetyControllerNode(Node):
         msg.angular.z = angular_z
         self._cmd_pub.publish(msg)
 
+    def _cancel_callback(self, goal_handle) -> CancelResponse:
+        # Accept every cancel request; the control loop polls the flag via
+        # _is_cancel_requested and stops the rover at the next tick.
+        return CancelResponse.ACCEPT
+
+    def _is_cancel_requested(self) -> bool:
+        handle = self._active_goal_handle
+        return handle is not None and handle.is_cancel_requested
+
     def _execute_callback(self, goal_handle):
         goal = goal_handle.request
         result = ExecuteCommand.Result()
+        if goal.distance_m < 0.0:
+            goal_handle.abort()
+            result.success = False
+            result.message = (
+                f"rejected: distance_m must be non-negative, got {goal.distance_m}"
+            )
+            self.get_logger().warn(result.message)
+            return result
+        self._active_goal_handle = goal_handle
         feedback = ExecuteCommand.Feedback()
         try:
             feedback.phase = "rotating"
@@ -135,6 +163,13 @@ class SafetyControllerNode(Node):
             feedback.phase = "driving"
             goal_handle.publish_feedback(feedback)
             self._controller.drive_distance(goal.distance_m)
+        except ControllerCancelledError as exc:
+            self._publish_twist(0.0, 0.0)
+            goal_handle.canceled()
+            result.success = False
+            result.message = f"canceled: {exc}"
+            self.get_logger().warn(result.message)
+            return result
         except (ControllerTimeoutError, RuntimeError) as exc:
             self._publish_twist(0.0, 0.0)
             goal_handle.abort()
@@ -142,6 +177,8 @@ class SafetyControllerNode(Node):
             result.message = f"aborted: {exc}"
             self.get_logger().warn(result.message)
             return result
+        finally:
+            self._active_goal_handle = None
 
         self._publish_twist(0.0, 0.0)
         goal_handle.succeed()
@@ -157,7 +194,11 @@ class SafetyControllerNode(Node):
 def main(argv=None) -> int:
     rclpy.init(args=argv)
     node = SafetyControllerNode()
-    executor = MultiThreadedExecutor()
+    # At least 3 threads: the blocking execute callback plus the /imu and
+    # /odom subscription callbacks must all run concurrently. The default
+    # (cpu_count) can be 1-2 on small embedded boards, which would starve the
+    # sensor callbacks while a maneuver runs.
+    executor = MultiThreadedExecutor(num_threads=4)
     executor.add_node(node)
     node.get_logger().info(
         f"SafetyControllerNode up; ExecuteCommand action server ready on "
