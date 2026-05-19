@@ -1,6 +1,6 @@
 import math
 from dataclasses import dataclass
-from typing import Callable, Tuple
+from typing import Callable, Optional, Tuple
 
 
 @dataclass(frozen=True)
@@ -30,6 +30,10 @@ class ControllerTimeoutError(Exception):
     """Raised when a control phase exceeds its computed timeout budget."""
 
 
+class ControllerCancelledError(Exception):
+    """Raised when a control phase is aborted via the should_abort predicate."""
+
+
 def rotate_timeout_seconds(heading_delta_rad: float, params: ControllerParams) -> float:
     nominal = abs(heading_delta_rad) / params.max_angular if params.max_angular > 0 else params.max_timeout_s
     budget = nominal + params.timeout_safety_margin_s
@@ -51,6 +55,7 @@ class SafetyController:
         publish_twist: Callable[[float, float], None],
         sleep: Callable[[float], None],
         now: Callable[[], float],
+        should_abort: Optional[Callable[[], bool]] = None,
     ):
         self.params = params
         self._get_yaw = get_yaw
@@ -58,6 +63,7 @@ class SafetyController:
         self._publish = publish_twist
         self._sleep = sleep
         self._now = now
+        self._should_abort = should_abort if should_abort is not None else (lambda: False)
 
     def rotate_to_heading(self, heading_delta_rad: float) -> None:
         params = self.params
@@ -70,6 +76,9 @@ class SafetyController:
             if abs(error) < params.heading_tolerance_rad:
                 self._publish(0.0, 0.0)
                 return
+            if self._should_abort():
+                self._publish(0.0, 0.0)
+                raise ControllerCancelledError("rotate_to_heading cancelled")
             if self._now() >= deadline:
                 self._publish(0.0, 0.0)
                 raise ControllerTimeoutError(
@@ -86,10 +95,13 @@ class SafetyController:
         start_xy = self._get_position()
         deadline = self._now() + drive_timeout_seconds(distance_m, params)
         while True:
-            traveled = displacement(start_xy, self._get_position())
-            if traveled >= distance_m:
+            travelled = displacement(start_xy, self._get_position())
+            if travelled >= distance_m:
                 self._publish(0.0, 0.0)
                 return
+            if self._should_abort():
+                self._publish(0.0, 0.0)
+                raise ControllerCancelledError("drive_distance cancelled")
             if self._now() >= deadline:
                 self._publish(0.0, 0.0)
                 raise ControllerTimeoutError(

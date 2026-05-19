@@ -5,6 +5,7 @@ import pytest
 from safety_controller_layer.control_math import (
     ControllerParams,
     ControllerTimeoutError,
+    ControllerCancelledError,
     SafetyController,
 )
 
@@ -43,7 +44,7 @@ class StuckYawWorld(FakeWorld):
         self.time += seconds  # advance clock, do NOT update yaw
 
 
-def _make_controller(world, params=None):
+def _make_controller(world, params=None, should_abort=None):
     return SafetyController(
         params=params or ControllerParams(),
         get_yaw=world.get_yaw,
@@ -51,6 +52,7 @@ def _make_controller(world, params=None):
         publish_twist=world.publish,
         sleep=world.sleep,
         now=world.now,
+        should_abort=should_abort,
     )
 
 
@@ -240,3 +242,47 @@ def test_execute_command_propagates_drive_timeout():
     controller = _make_controller(world)
     with pytest.raises(ControllerTimeoutError):
         controller.execute_command(heading_degree=0.0, distance_m=1.0)
+
+
+def test_rotate_to_heading_raises_on_cancel():
+    world = FakeWorld(initial_yaw=0.0)
+    controller = _make_controller(world, should_abort=lambda: True)
+    with pytest.raises(ControllerCancelledError):
+        controller.rotate_to_heading(math.radians(30))
+
+
+def test_rotate_to_heading_publishes_stop_before_raising_on_cancel():
+    world = FakeWorld(initial_yaw=0.0)
+    controller = _make_controller(world, should_abort=lambda: True)
+    with pytest.raises(ControllerCancelledError):
+        controller.rotate_to_heading(math.radians(30))
+    assert world.published[-1] == (0.0, 0.0)
+
+
+def test_rotate_to_heading_ignores_cancel_when_already_converged():
+    world = FakeWorld(initial_yaw=0.0)
+    controller = _make_controller(world, should_abort=lambda: True)
+    controller.rotate_to_heading(0.0)  # already within tolerance — must not raise
+    assert world.published == [(0.0, 0.0)]
+
+
+def test_drive_distance_raises_on_cancel():
+    world = DrivingWorld()
+    controller = _make_controller(world, should_abort=lambda: True)
+    with pytest.raises(ControllerCancelledError):
+        controller.drive_distance(1.0)
+
+
+def test_drive_distance_publishes_stop_before_raising_on_cancel():
+    world = DrivingWorld()
+    controller = _make_controller(world, should_abort=lambda: True)
+    with pytest.raises(ControllerCancelledError):
+        controller.drive_distance(1.0)
+    assert world.published[-1] == (0.0, 0.0)
+
+
+def test_execute_command_propagates_cancel():
+    world = FullWorld()
+    controller = _make_controller(world, should_abort=lambda: True)
+    with pytest.raises(ControllerCancelledError):
+        controller.execute_command(heading_degree=30.0, distance_m=1.0)
