@@ -233,3 +233,10 @@ def test_execute_command_negative_heading_turns_other_way():
     controller = _make_controller(world)
     controller.execute_command(heading_degree=-45.0, distance_m=0.0)
     assert abs(math.radians(-45) - world.yaw) < ControllerParams().heading_tolerance_rad
+
+
+def test_execute_command_propagates_drive_timeout():
+    world = StuckOdomWorld()
+    controller = _make_controller(world)
+    with pytest.raises(ControllerTimeoutError):
+        controller.execute_command(heading_degree=0.0, distance_m=1.0)
