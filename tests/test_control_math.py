@@ -58,3 +58,25 @@ def test_proportional_turn_unclamped_in_linear_region():
 def test_proportional_turn_respects_higher_kp():
     p = ControllerParams(max_angular=10.0, heading_kp=2.0)
     assert math.isclose(proportional_turn(error_rad=0.5, params=p), 1.0)
+
+
+from safety_controller_layer.control_math import displacement
+
+
+def test_displacement_zero_for_same_point():
+    assert displacement((0.0, 0.0), (0.0, 0.0)) == 0.0
+
+
+def test_displacement_pure_x():
+    assert math.isclose(displacement((0.0, 0.0), (1.5, 0.0)), 1.5)
+
+
+def test_displacement_diagonal_uses_euclidean():
+    assert math.isclose(displacement((0.0, 0.0), (3.0, 4.0)), 5.0)
+
+
+def test_displacement_is_symmetric():
+    assert math.isclose(
+        displacement((1.0, 2.0), (4.0, 6.0)),
+        displacement((4.0, 6.0), (1.0, 2.0)),
+    )

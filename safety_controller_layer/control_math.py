@@ -73,3 +73,10 @@ class SafetyController:
             angular = proportional_turn(error, params)
             self._publish(0.0, angular)
             self._sleep(period)
+
+
+def displacement(start_xy: Tuple[float, float], current_xy: Tuple[float, float]) -> float:
+    """Euclidean distance between two 2D points."""
+    dx = current_xy[0] - start_xy[0]
+    dy = current_xy[1] - start_xy[1]
+    return math.sqrt(dx * dx + dy * dy)
