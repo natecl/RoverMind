@@ -1,11 +1,23 @@
-"""ROS2 wrapper around SafetyController.
+"""ROS2 action server wrapping SafetyController.
+
+Exposes an `execute_command` ExecuteCommand action: the goal carries a relative
+heading change (degrees) and a forward distance (metres). The server turns the
+rover to the new heading then drives it forward, publishing /cmd_vel throughout
+and emitting "rotating" / "driving" feedback.
 
 Subscribes /imu (sensor_msgs/Imu) and /odom (nav_msgs/Odometry), publishes
-/cmd_vel (geometry_msgs/Twist). Bridges rclpy.spin_once-driven sensor reads
-into the pure-logic SafetyController.
+/cmd_vel (geometry_msgs/Twist).
 
-Unit tests for this file are intentionally omitted: rclpy is not available
-on the development machine. Verify on hardware using the main() entry point.
+Threading: a MultiThreadedExecutor runs the action execute callback -- which
+blocks inside the SafetyController control loops -- concurrently with the
+IMU/odom subscription callbacks, so the controller always reads fresh sensor
+data. All callbacks share a ReentrantCallbackGroup. Cached sensor values are
+single floats / a tuple reference, so the cross-thread read is GIL-atomic.
+
+This module is intentionally untested locally: rclpy is not installable on the
+development machine, and the ExecuteCommand action interface must be generated
+by a ROS2 build (colcon) before this file can even be imported. See
+safety_controller_layer_interfaces/action/ExecuteCommand.action.
 """
 
 import math
@@ -14,6 +26,9 @@ import time
 from typing import Optional, Tuple
 
 import rclpy
+from rclpy.action import ActionServer
+from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
@@ -25,9 +40,16 @@ from safety_controller_layer.control_math import (
     SafetyController,
 )
 
+# The ExecuteCommand action interface lives in a separate ROS2 interfaces
+# package that still needs to be scaffolded and built with colcon. Until then
+# this import fails at runtime -- the node cannot run, by design (chosen scope:
+# action server node now, interface package as a follow-up).
+from safety_controller_layer_interfaces.action import ExecuteCommand
+
 CMD_VEL_TOPIC = "/cmd_vel"
 IMU_TOPIC = "/imu"
 ODOM_TOPIC = "/odom"
+ACTION_NAME = "execute_command"
 
 
 def quaternion_to_yaw(x: float, y: float, z: float, w: float) -> float:
@@ -38,23 +60,43 @@ def quaternion_to_yaw(x: float, y: float, z: float, w: float) -> float:
 
 
 class SafetyControllerNode(Node):
+    """ROS2 node exposing SafetyController as an ExecuteCommand action server."""
+
     def __init__(self, params: Optional[ControllerParams] = None):
         super().__init__("safety_controller")
         self._params = params or ControllerParams()
         self._latest_yaw: Optional[float] = None
         self._latest_xy: Optional[Tuple[float, float]] = None
 
+        # A ReentrantCallbackGroup lets the IMU/odom subscription callbacks run
+        # on other MultiThreadedExecutor threads while the action callback is
+        # blocked inside a SafetyController control loop.
+        self._callback_group = ReentrantCallbackGroup()
+
         self._cmd_pub = self.create_publisher(Twist, CMD_VEL_TOPIC, 10)
-        self.create_subscription(Imu, IMU_TOPIC, self._on_imu, 10)
-        self.create_subscription(Odometry, ODOM_TOPIC, self._on_odom, 10)
+        self.create_subscription(
+            Imu, IMU_TOPIC, self._on_imu, 10, callback_group=self._callback_group
+        )
+        self.create_subscription(
+            Odometry, ODOM_TOPIC, self._on_odom, 10,
+            callback_group=self._callback_group,
+        )
 
         self._controller = SafetyController(
             params=self._params,
             get_yaw=self._read_yaw,
             get_position=self._read_position,
             publish_twist=self._publish_twist,
-            sleep=self._spin_sleep,
+            sleep=time.sleep,
             now=time.monotonic,
+        )
+
+        self._action_server = ActionServer(
+            self,
+            ExecuteCommand,
+            ACTION_NAME,
+            execute_callback=self._execute_callback,
+            callback_group=self._callback_group,
         )
 
     def _on_imu(self, msg: Imu) -> None:
@@ -66,13 +108,11 @@ class SafetyControllerNode(Node):
         self._latest_xy = (p.x, p.y)
 
     def _read_yaw(self) -> float:
-        rclpy.spin_once(self, timeout_sec=0.0)
         if self._latest_yaw is None:
             raise RuntimeError(f"No IMU message received on {IMU_TOPIC} yet")
         return self._latest_yaw
 
     def _read_position(self) -> Tuple[float, float]:
-        rclpy.spin_once(self, timeout_sec=0.0)
         if self._latest_xy is None:
             raise RuntimeError(f"No odometry message received on {ODOM_TOPIC} yet")
         return self._latest_xy
@@ -83,38 +123,59 @@ class SafetyControllerNode(Node):
         msg.angular.z = angular_z
         self._cmd_pub.publish(msg)
 
-    def _spin_sleep(self, seconds: float) -> None:
-        end = time.monotonic() + seconds
-        while True:
-            remaining = end - time.monotonic()
-            if remaining <= 0.0:
-                return
-            rclpy.spin_once(self, timeout_sec=remaining)
+    def _execute_callback(self, goal_handle):
+        goal = goal_handle.request
+        result = ExecuteCommand.Result()
+        feedback = ExecuteCommand.Feedback()
+        try:
+            feedback.phase = "rotating"
+            goal_handle.publish_feedback(feedback)
+            self._controller.rotate_to_heading(math.radians(goal.heading_degree))
 
-    def execute_command(self, heading_degree: float, distance_m: float) -> None:
-        self._controller.execute_command(heading_degree, distance_m)
+            feedback.phase = "driving"
+            goal_handle.publish_feedback(feedback)
+            self._controller.drive_distance(goal.distance_m)
+        except (ControllerTimeoutError, RuntimeError) as exc:
+            self._publish_twist(0.0, 0.0)
+            goal_handle.abort()
+            result.success = False
+            result.message = f"aborted: {exc}"
+            self.get_logger().warn(result.message)
+            return result
+
+        self._publish_twist(0.0, 0.0)
+        goal_handle.succeed()
+        result.success = True
+        result.message = (
+            f"completed: turned {goal.heading_degree:.1f} deg, "
+            f"drove {goal.distance_m:.2f} m"
+        )
+        self.get_logger().info(result.message)
+        return result
 
 
 def main(argv=None) -> int:
     rclpy.init(args=argv)
     node = SafetyControllerNode()
+    executor = MultiThreadedExecutor()
+    executor.add_node(node)
+    node.get_logger().info(
+        f"SafetyControllerNode up; ExecuteCommand action server ready on "
+        f"'{ACTION_NAME}'."
+    )
     try:
-        node.get_logger().info("Waiting for first /imu and /odom messages...")
-        while node._latest_yaw is None or node._latest_xy is None:
-            rclpy.spin_once(node, timeout_sec=0.1)
-        node.get_logger().info(
-            "Sensors ready. SafetyControllerNode is up; "
-            "import and call node.execute_command(heading_degree, distance_m) from another script."
-        )
-        rclpy.spin(node)
-    except (KeyboardInterrupt, ControllerTimeoutError) as e:
-        node.get_logger().warn(f"Stopping: {e!r}")
+        executor.spin()
+    except KeyboardInterrupt:
+        node.get_logger().warn("Interrupted; stopping rover.")
     finally:
         try:
             node._publish_twist(0.0, 0.0)
         except Exception:
             pass
-        node.destroy_node()
+        try:
+            node.destroy_node()
+        except Exception:
+            pass
         rclpy.shutdown()
     return 0
 
