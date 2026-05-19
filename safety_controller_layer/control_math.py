@@ -26,6 +26,16 @@ def proportional_turn(error_rad: float, params: ControllerParams) -> float:
     return max(-params.max_angular, min(params.max_angular, raw))
 
 
+class ControllerTimeoutError(Exception):
+    """Raised when a control phase exceeds its computed timeout budget."""
+
+
+def rotate_timeout_seconds(heading_delta_rad: float, params: ControllerParams) -> float:
+    nominal = abs(heading_delta_rad) / params.max_angular if params.max_angular > 0 else params.max_timeout_s
+    budget = nominal + params.timeout_safety_margin_s
+    return max(params.min_timeout_s, min(params.max_timeout_s, budget))
+
+
 class SafetyController:
     def __init__(
         self,
@@ -48,11 +58,18 @@ class SafetyController:
         period = 1.0 / params.loop_rate_hz
         start_yaw = self._get_yaw()
         target_yaw = start_yaw + heading_delta_rad
+        deadline = self._now() + rotate_timeout_seconds(heading_delta_rad, params)
         while True:
             error = wrap_angle(target_yaw - self._get_yaw())
             if abs(error) < params.heading_tolerance_rad:
                 self._publish(0.0, 0.0)
                 return
+            if self._now() >= deadline:
+                self._publish(0.0, 0.0)
+                raise ControllerTimeoutError(
+                    f"rotate_to_heading did not converge within budget "
+                    f"(target_delta={heading_delta_rad:.3f} rad)"
+                )
             angular = proportional_turn(error, params)
             self._publish(0.0, angular)
             self._sleep(period)

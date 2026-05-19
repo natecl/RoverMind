@@ -4,6 +4,7 @@ import pytest
 
 from safety_controller_layer.control_math import (
     ControllerParams,
+    ControllerTimeoutError,
     SafetyController,
 )
 
@@ -33,6 +34,13 @@ class FakeWorld:
 
     def now(self):
         return self.time
+
+
+class StuckYawWorld(FakeWorld):
+    """IMU is frozen — yaw never updates regardless of commanded velocity."""
+
+    def sleep(self, seconds):
+        self.time += seconds  # advance clock, do NOT update yaw
 
 
 def _make_controller(world, params=None):
@@ -80,3 +88,18 @@ def test_rotate_to_heading_publishes_no_linear_motion():
     controller = _make_controller(world)
     controller.rotate_to_heading(math.radians(45))
     assert all(linear == 0.0 for linear, _ in world.published)
+
+
+def test_rotate_to_heading_raises_on_timeout():
+    world = StuckYawWorld(initial_yaw=0.0)
+    controller = _make_controller(world)
+    with pytest.raises(ControllerTimeoutError):
+        controller.rotate_to_heading(math.radians(30))
+
+
+def test_rotate_to_heading_publishes_stop_before_raising_on_timeout():
+    world = StuckYawWorld(initial_yaw=0.0)
+    controller = _make_controller(world)
+    with pytest.raises(ControllerTimeoutError):
+        controller.rotate_to_heading(math.radians(30))
+    assert world.published[-1] == (0.0, 0.0)
