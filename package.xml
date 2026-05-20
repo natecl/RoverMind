@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>safety_controller_layer</name>
+  <version>0.0.1</version>
+  <description>
+    ROS2 safety controller layer for the Agilex LIMO Pro: an ExecuteCommand
+    action server that turns the rover by a relative heading then drives it
+    forward a measured distance, using IMU and odometry feedback.
+  </description>
+  <maintainer email="nathanchinlue19@gmail.com">Nathan Chin-Lue</maintainer>
+  <license>MIT</license>
+
+  <depend>rclpy</depend>
+  <depend>geometry_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>safety_controller_layer_interfaces</depend>
+
+  <test_depend>python3-pytest</test_depend>
+  <test_depend>launch</test_depend>
+  <test_depend>launch_ros</test_depend>
+  <test_depend>launch_testing</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
