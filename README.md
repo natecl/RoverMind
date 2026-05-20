@@ -74,7 +74,7 @@ limo_vlm_agent/
 
 - **Agent Framework:** LangGraph (stateful agent graph with cycles, checkpointing, tool use)
 - **VLM Backbone:** Claude Vision API / GPT-4o (cloud, swappable to local PaliGemma 3B for edge)
-- **Robotics Middleware:** ROS2 Humble
+- **Robotics Middleware:** ROS2 Foxy
 - **Hardware:** LIMO Agilex Pro with NVIDIA Jetson Orin Nano (8GB)
 - **Controller:** Proportional/PID control with safety clamping
 - **Language:** Python 3.10+
@@ -109,7 +109,7 @@ The agent has access to three tools:
 ### Prerequisites
 
 - LIMO Agilex Pro with Jetson Orin Nano running JetPack 6.x
-- ROS2 Humble installed
+- ROS2 Foxy installed
 - Python 3.10+
 - API key for Claude or OpenAI (for cloud VLM)
 
