@@ -45,10 +45,10 @@ from safety_controller_layer.control_math import (
     SafetyController,
 )
 
-# The ExecuteCommand action interface lives in a separate ROS2 interfaces
-# package that still needs to be scaffolded and built with colcon. Until then
-# this import fails at runtime -- the node cannot run, by design (chosen scope:
-# action server node now, interface package as a follow-up).
+# The ExecuteCommand action interface lives in the safety_controller_layer_interfaces
+# ament_cmake package. That package is scaffolded (package.xml + CMakeLists.txt)
+# but must be built with `colcon build` in a ROS2 workspace before this import
+# resolves -- the generated interface is not importable from source alone.
 from safety_controller_layer_interfaces.action import ExecuteCommand
 
 CMD_VEL_TOPIC = "/cmd_vel"

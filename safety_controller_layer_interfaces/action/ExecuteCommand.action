@@ -1,10 +1,9 @@
 # ExecuteCommand.action
 # Turn the rover by a relative heading change, then drive forward.
 #
-# This interface still needs a ROS2 ament_cmake package (package.xml +
-# CMakeLists.txt invoking rosidl_generate_interfaces) before it can be built
-# with colcon. Deferred per the chosen scope (action server node now,
-# interface package as a follow-up).
+# Built as part of the safety_controller_layer_interfaces ament_cmake package
+# (see ../package.xml and ../CMakeLists.txt). Run `colcon build` in a ROS2
+# workspace to generate the ExecuteCommand action interface.
 
 # --- Goal ---
 float64 heading_degree   # relative heading change in degrees, CCW positive

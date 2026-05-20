@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>safety_controller_layer_interfaces</name>
+  <version>0.0.1</version>
+  <description>
+    ROS2 action interfaces for the RoverMind safety controller layer.
+    Defines ExecuteCommand: turn the rover by a relative heading change,
+    then drive forward a measured distance.
+  </description>
+  <maintainer email="nathanchinlue19@gmail.com">Nathan Chin-Lue</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>rosidl_default_generators</buildtool_depend>
+
+  <!-- Required by rosidl to generate any .action interface: the generated
+       goal/result/feedback wrappers reference action_msgs/msg/GoalStatus. -->
+  <depend>action_msgs</depend>
+
+  <exec_depend>rosidl_default_runtime</exec_depend>
+
+  <member_of_group>rosidl_interface_packages</member_of_group>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
