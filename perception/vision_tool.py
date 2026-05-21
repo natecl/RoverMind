@@ -5,6 +5,7 @@ orchestration is testable with fakes. The real rclpy capture lives here too
 (ros_capture_fn) but is hardware-only.
 """
 
+from perception.depth_math import depth_to_distance_bucket, sample_depth_patch
 from perception.scene_parsing import build_observation, parse_yes_no
 
 _VISIBLE_Q = "Is there a {target} in this image? Answer yes or no."
@@ -18,18 +19,36 @@ class FrameCaptureError(RuntimeError):
     """Raised when no camera frame can be obtained within the timeout."""
 
 
-def capture_and_analyze(target, *, capture_fn, moondream):
+def capture_and_analyze(target, *, capture_fn, moondream, depth_fn=None):
     """Capture one frame, ask Moondream2 about `target`, return a SceneObservation.
 
     `capture_fn()` returns an image (or raises FrameCaptureError). `moondream`
-    is an object with `ask(image, question) -> str`. When the target is not
-    visible, the direction/distance questions are skipped.
+    has `ask(image, question) -> str` and `point(image, target) -> (x, y)|None`.
+
+    When `depth_fn` is given, distance is read from the depth camera: Moondream2
+    points at the target, the depth patch at that point is sampled, and a metric
+    bucket is computed. If the target cannot be pointed at, or the depth patch
+    is all-invalid, the tool falls back to asking Moondream2 for the distance.
     """
     image = capture_fn()
     visible_answer = moondream.ask(image, _VISIBLE_Q.format(target=target))
     if not parse_yes_no(visible_answer):
         return build_observation(target, visible_answer, "", "")
     direction_answer = moondream.ask(image, _DIRECTION_Q.format(target=target))
+
+    if depth_fn is not None:
+        point = moondream.point(image, target)
+        if point is not None:
+            x_norm, y_norm = point
+            samples = sample_depth_patch(depth_fn(), x_norm, y_norm)
+            bucket, distance_m = depth_to_distance_bucket(samples)
+            if bucket is not None:
+                return build_observation(
+                    target, visible_answer, direction_answer, "",
+                    distance_override=bucket, distance_m=distance_m,
+                    distance_source="depth",
+                )
+
     distance_answer = moondream.ask(image, _DISTANCE_Q.format(target=target))
     return build_observation(
         target, visible_answer, direction_answer, distance_answer,

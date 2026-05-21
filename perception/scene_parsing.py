@@ -82,12 +82,17 @@ def build_observation(
     visible_answer: str,
     direction_answer: str,
     distance_answer: str,
+    *,
+    distance_override: Optional[Distance] = None,
+    distance_m: Optional[float] = None,
+    distance_source: Literal["depth", "vlm"] = "vlm",
 ) -> SceneObservation:
-    """Assemble a SceneObservation from three raw Moondream2 answers.
+    """Assemble a SceneObservation from raw Moondream2 answers.
 
     `should_stop` is derived here (found and distance == "close"), never asked
     of the VLM. When the target is not found, direction/distance are None and
-    should_stop is False.
+    should_stop is False. When `distance_override` is given (depth path), it is
+    used instead of parsing `distance_answer`.
     """
     raw_answers = {
         "visible": visible_answer,
@@ -101,9 +106,13 @@ def build_observation(
             should_stop=False, raw_answers=raw_answers,
         )
     direction = parse_direction(direction_answer)
-    distance = parse_distance(distance_answer)
+    if distance_override is not None:
+        distance = distance_override
+    else:
+        distance = parse_distance(distance_answer)
     should_stop = distance == "close"
     return SceneObservation(
         target=target, found=True, direction=direction, distance=distance,
         should_stop=should_stop, raw_answers=raw_answers,
+        distance_m=distance_m, distance_source=distance_source,
     )
