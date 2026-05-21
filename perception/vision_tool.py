@@ -34,3 +34,44 @@ def capture_and_analyze(target, *, capture_fn, moondream):
     return build_observation(
         target, visible_answer, direction_answer, distance_answer,
     )
+
+
+def ros_capture_fn(topic: str = "/camera/color/image_raw",
+                   timeout_s: float = 5.0):
+    """Grab one frame off the camera topic as a PIL RGB image.
+
+    Hardware-only: needs a sourced ROS2 environment. Raises FrameCaptureError
+    if no frame arrives within `timeout_s`.
+    """
+    import time
+
+    import cv2
+    import rclpy
+    from cv_bridge import CvBridge
+    from PIL import Image
+    from rclpy.node import Node
+    from sensor_msgs.msg import Image as RosImage
+
+    rclpy.init()
+    node = Node("vision_tool_capture")
+    bridge = CvBridge()
+    received = {}
+
+    def _on_image(msg):
+        received["msg"] = msg
+
+    node.create_subscription(RosImage, topic, _on_image, 10)
+    try:
+        deadline = time.monotonic() + timeout_s
+        while "msg" not in received and time.monotonic() < deadline:
+            rclpy.spin_once(node, timeout_sec=0.1)
+        if "msg" not in received:
+            raise FrameCaptureError(
+                f"no frame on {topic} within {timeout_s:.1f}s"
+            )
+        bgr = bridge.imgmsg_to_cv2(received["msg"], desired_encoding="bgr8")
+        rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+        return Image.fromarray(rgb)
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
