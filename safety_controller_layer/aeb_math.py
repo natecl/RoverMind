@@ -29,3 +29,12 @@ class AebParams:
                 f"release_distance_m ({self.release_distance_m}) must be greater "
                 f"than trigger_distance_m ({self.trigger_distance_m})"
             )
+
+
+def gate_twist(
+    linear_x: float, angular_z: float, braking: bool
+) -> Tuple[float, float]:
+    """Zero forward linear velocity while braking; pass rotation and reverse."""
+    if braking and linear_x > 0.0:
+        return (0.0, angular_z)
+    return (linear_x, angular_z)
