@@ -2,7 +2,7 @@ import dataclasses
 
 import pytest
 
-from perception.scene_parsing import SceneObservation
+from perception.scene_parsing import SceneObservation, parse_yes_no
 
 
 def test_scene_observation_holds_all_fields():
@@ -29,3 +29,17 @@ def test_scene_observation_is_frozen():
     )
     with pytest.raises(dataclasses.FrozenInstanceError):
         obs.found = True
+
+
+@pytest.mark.parametrize("answer,expected", [
+    ("Yes.", True),
+    ("Yes, there is a water bottle on the table.", True),
+    ("No.", False),
+    ("No, I don't see one.", False),
+    ("There is no bottle visible.", False),
+    ("", False),
+    ("I cannot tell.", False),
+    ("Yes, but it is no longer clearly visible.", False),  # both -> safe default
+])
+def test_parse_yes_no(answer, expected):
+    assert parse_yes_no(answer) is expected
