@@ -68,7 +68,7 @@ class FakeRover(Node):
         self._linear = 0.0
         self._angular = 0.0
         self._last_tick = time.monotonic()
-        self.create_subscription(Twist, "/cmd_vel", self._on_cmd_vel, 10)
+        self.create_subscription(Twist, "/cmd_vel_raw", self._on_cmd_vel, 10)
         self.imu_pub = self.create_publisher(Imu, "/imu", 10)
         self.odom_pub = self.create_publisher(Odometry, "/odom", 10)
         self.create_timer(0.02, self._tick)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Manually publish Twist commands to /cmd_vel for rover bring-up testing.
+"""Manually publish Twist commands to /cmd_vel_raw for rover bring-up testing.
 
 Prompts for linear (m/s), angular (rad/s), and duration (s), publishes the
 Twist at 10 Hz for the requested duration, then sends a zero-velocity stop.
@@ -15,7 +15,7 @@ from geometry_msgs.msg import Twist
 
 
 PUBLISH_RATE_HZ = 10.0
-CMD_VEL_TOPIC = "/cmd_vel"
+CMD_VEL_TOPIC = "/cmd_vel_raw"
 
 
 class TestDrivePublisher(Node):

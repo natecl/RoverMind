@@ -2,7 +2,7 @@
 
 Exposes an `execute_command` ExecuteCommand action: the goal carries a relative
 heading change (degrees) and a forward distance (metres). The server turns the
-rover to the new heading then drives it forward, publishing /cmd_vel throughout
+rover to the new heading then drives it forward, publishing /cmd_vel_raw throughout
 and emitting "rotating" / "driving" feedback.
 
 A goal can be cancelled mid-maneuver: the controller's should_abort hook polls
@@ -10,7 +10,7 @@ the active goal handle's cancel flag on every ~20 Hz control tick, stops the
 rover, and reports the goal as canceled.
 
 Subscribes /imu (sensor_msgs/Imu) and /odom (nav_msgs/Odometry), publishes
-/cmd_vel (geometry_msgs/Twist).
+/cmd_vel_raw (geometry_msgs/Twist).
 
 Threading: a MultiThreadedExecutor runs the action execute callback -- which
 blocks inside the SafetyController control loops -- concurrently with the
@@ -51,7 +51,7 @@ from safety_controller_layer.control_math import (
 # resolves -- the generated interface is not importable from source alone.
 from safety_controller_layer_interfaces.action import ExecuteCommand
 
-CMD_VEL_TOPIC = "/cmd_vel"
+CMD_VEL_TOPIC = "/cmd_vel_raw"
 IMU_TOPIC = "/imu"
 ODOM_TOPIC = "/odom"
 ACTION_NAME = "execute_command"
