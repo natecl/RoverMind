@@ -1,0 +1,7 @@
+# RoverMind Python dependencies for VLM perception.
+# rclpy, cv_bridge and sensor_msgs are NOT here — they come from the sourced
+# ROS2 environment on the rover, not from pip.
+torch
+transformers
+pillow
+einops
