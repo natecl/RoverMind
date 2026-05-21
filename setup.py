@@ -24,6 +24,7 @@ setup(
         "console_scripts": [
             "safety_controller_node = "
             "safety_controller_layer.safety_controller_node:main",
+            "aeb_node = safety_controller_layer.aeb_node:main",
         ],
     },
 )
