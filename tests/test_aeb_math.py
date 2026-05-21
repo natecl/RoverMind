@@ -60,3 +60,41 @@ def test_brake_state_machine_stays_clear_above_trigger_distance():
     sm = BrakeStateMachine(AebParams())
     assert sm.update(min_range=1.0, now=0.0) is False
     assert sm.braking is False
+
+
+def test_brake_holds_in_dead_band():
+    sm = BrakeStateMachine(AebParams())
+    sm.update(min_range=0.30, now=0.0)                   # trip
+    assert sm.update(min_range=0.50, now=1.0) is True    # dead band -> hold
+
+
+def test_brake_releases_after_dwell_past_release_distance():
+    sm = BrakeStateMachine(AebParams())                  # dwell = 0.5 s
+    sm.update(min_range=0.30, now=0.0)                   # trip
+    assert sm.update(min_range=0.70, now=1.0) is True    # clear, dwell starts
+    assert sm.update(min_range=0.70, now=1.4) is True    # 0.4 s < dwell -> hold
+    assert sm.update(min_range=0.70, now=1.5) is False   # 0.5 s >= dwell -> release
+
+
+def test_brake_does_not_release_before_dwell_elapses():
+    sm = BrakeStateMachine(AebParams())
+    sm.update(min_range=0.30, now=0.0)                   # trip
+    sm.update(min_range=0.70, now=1.0)                   # clear, dwell starts
+    assert sm.update(min_range=0.70, now=1.49) is True   # still within dwell
+
+
+def test_brake_dwell_resets_when_obstacle_reenters_dead_band():
+    sm = BrakeStateMachine(AebParams())                  # dwell = 0.5 s
+    sm.update(min_range=0.30, now=0.0)                   # trip
+    sm.update(min_range=0.70, now=1.0)                   # clear past release
+    sm.update(min_range=0.50, now=1.2)                   # back into dead band
+    assert sm.update(min_range=0.70, now=1.6) is True    # dwell restarts at 1.6
+    assert sm.update(min_range=0.70, now=2.0) is True    # 0.4 s into restart
+    assert sm.update(min_range=0.70, now=2.1) is False   # 0.5 s -> release
+
+
+def test_brake_does_not_chatter_at_trigger_threshold():
+    sm = BrakeStateMachine(AebParams())
+    sm.update(min_range=0.30, now=0.0)                   # trip
+    for t in range(1, 20):
+        assert sm.update(min_range=0.41, now=float(t)) is True
