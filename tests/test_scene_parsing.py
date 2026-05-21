@@ -2,7 +2,7 @@ import dataclasses
 
 import pytest
 
-from perception.scene_parsing import SceneObservation, parse_yes_no
+from perception.scene_parsing import SceneObservation, parse_direction, parse_yes_no
 
 
 def test_scene_observation_holds_all_fields():
@@ -43,3 +43,17 @@ def test_scene_observation_is_frozen():
 ])
 def test_parse_yes_no(answer, expected):
     assert parse_yes_no(answer) is expected
+
+
+@pytest.mark.parametrize("answer,expected", [
+    ("It is on the left.", "left"),
+    ("The bottle is in the center of the image.", "center"),
+    ("It's in the middle.", "center"),
+    ("Located in the centre.", "center"),
+    ("To the right.", "right"),
+    ("It could be on the left or the right.", None),  # ambiguous -> None
+    ("", None),
+    ("I am not sure where it is.", None),
+])
+def test_parse_direction(answer, expected):
+    assert parse_direction(answer) == expected

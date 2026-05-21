@@ -35,3 +35,21 @@ def parse_yes_no(answer: str) -> bool:
     has_yes = re.search(r"\byes\b", text) is not None
     has_no = re.search(r"\bno\b", text) is not None
     return has_yes and not has_no
+
+
+def parse_direction(answer: str) -> Optional[Direction]:
+    """Map a direction answer to left/center/right.
+
+    Accepts 'middle' and 'centre' as synonyms for center. If the answer names
+    more than one direction, or none, it is ambiguous and returns None.
+    """
+    text = answer.lower()
+    present = {
+        "left": "left" in text,
+        "center": ("center" in text or "centre" in text or "middle" in text),
+        "right": "right" in text,
+    }
+    matches = [name for name, found in present.items() if found]
+    if len(matches) == 1:
+        return matches[0]
+    return None
