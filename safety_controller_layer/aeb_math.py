@@ -63,7 +63,7 @@ class BrakeStateMachine:
             if min_range > params.release_distance_m:
                 if self._clear_since is None:
                     self._clear_since = now
-                elif now - self._clear_since >= params.release_dwell_s:
+                elif now - self._clear_since >= params.release_dwell_s - 1e-9:
                     self.braking = False
                     self._clear_since = None
             else:

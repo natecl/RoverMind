@@ -98,3 +98,31 @@ def test_brake_does_not_chatter_at_trigger_threshold():
     sm.update(min_range=0.30, now=0.0)                   # trip
     for t in range(1, 20):
         assert sm.update(min_range=0.41, now=float(t)) is True
+
+
+def test_phase1_brake_and_release_scenario():
+    """End-to-end Phase 1 slice: a sequence of obstacle distances drives the
+    state machine, and the resulting brake flag gates a steady 0.3 m/s forward
+    command."""
+    params = AebParams()
+    sm = BrakeStateMachine(params)
+    forward_cmd = (0.3, 0.0)  # linear_x, angular_z
+
+    # Far away -> command passes untouched.
+    braking = sm.update(min_range=2.0, now=0.0)
+    assert gate_twist(*forward_cmd, braking=braking) == (0.3, 0.0)
+
+    # Obstacle inside trigger -> forward zeroed.
+    braking = sm.update(min_range=0.35, now=0.1)
+    assert gate_twist(*forward_cmd, braking=braking) == (0.0, 0.0)
+
+    # While braked, a rotate command still passes.
+    assert gate_twist(0.0, 0.5, braking=braking) == (0.0, 0.5)
+
+    # Back away past release distance; brake holds until dwell elapses.
+    braking = sm.update(min_range=0.80, now=0.2)
+    assert gate_twist(*forward_cmd, braking=braking) == (0.0, 0.0)
+
+    # After the dwell, brake releases and forward motion resumes.
+    braking = sm.update(min_range=0.80, now=0.7)
+    assert gate_twist(*forward_cmd, braking=braking) == (0.3, 0.0)
