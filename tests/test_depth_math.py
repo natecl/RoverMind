@@ -1,4 +1,4 @@
-from perception.depth_math import depth_to_distance_bucket
+from perception.depth_math import depth_to_distance_bucket, sample_depth_patch
 
 
 def test_close_reading():
@@ -30,3 +30,22 @@ def test_median_ignores_invalid_zeros_and_outliers():
     bucket, metres = depth_to_distance_bucket([0.0, 0.5, 0.0, 0.5, 0.5])
     assert bucket == "close"
     assert metres == 0.5
+
+
+def _grid(value_mm, width=10, height=10):
+    """A height x width depth image where every pixel is value_mm."""
+    return [[value_mm for _ in range(width)] for _ in range(height)]
+
+
+def test_sample_depth_patch_converts_mm_to_metres():
+    depth_mm = _grid(500)  # every pixel 500 mm
+    samples = sample_depth_patch(depth_mm, 0.5, 0.5, patch_radius=1)
+    assert samples == [0.5] * 9  # 3x3 patch, all 0.5 m
+
+
+def test_sample_depth_patch_clamps_to_image_bounds():
+    depth_mm = _grid(800)
+    # Point at the top-left corner; the patch is clipped to in-bounds pixels.
+    samples = sample_depth_patch(depth_mm, 0.0, 0.0, patch_radius=2)
+    assert all(s == 0.8 for s in samples)
+    assert len(samples) == 9  # 3x3 of the 5x5 patch lies inside the image

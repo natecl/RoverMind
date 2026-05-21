@@ -41,3 +41,24 @@ def depth_to_distance_bucket(
     if median <= medium_max_m:
         return ("medium", median)
     return ("far", median)
+
+
+def sample_depth_patch(depth_mm, x_norm: float, y_norm: float,
+                       patch_radius: int = 2):
+    """Sample a square patch of a depth image around a normalised point.
+
+    `depth_mm` is a height x width grid (list-of-lists or ndarray) of raw depth
+    in millimetres. `x_norm`/`y_norm` are in [0, 1]. Returns a flat list of the
+    in-bounds patch values converted to metres (0 mm holes are kept as 0.0 and
+    filtered later by depth_to_distance_bucket).
+    """
+    height = len(depth_mm)
+    width = len(depth_mm[0])
+    cx = min(width - 1, max(0, round(x_norm * (width - 1))))
+    cy = min(height - 1, max(0, round(y_norm * (height - 1))))
+    samples = []
+    for yy in range(cy - patch_radius, cy + patch_radius + 1):
+        for xx in range(cx - patch_radius, cx + patch_radius + 1):
+            if 0 <= yy < height and 0 <= xx < width:
+                samples.append(depth_mm[yy][xx] / 1000.0)
+    return samples
