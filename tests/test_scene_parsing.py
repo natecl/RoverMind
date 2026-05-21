@@ -101,3 +101,22 @@ def test_build_observation_not_found_zeroes_fields():
     assert obs.direction is None
     assert obs.distance is None
     assert obs.should_stop is False
+
+
+def test_scene_observation_depth_fields_default_to_vlm():
+    obs = SceneObservation(
+        target="bottle", found=True, direction="left", distance="close",
+        should_stop=True, raw_answers={},
+    )
+    assert obs.distance_m is None
+    assert obs.distance_source == "vlm"
+
+
+def test_scene_observation_accepts_depth_fields():
+    obs = SceneObservation(
+        target="bottle", found=True, direction="left", distance="close",
+        should_stop=True, raw_answers={}, distance_m=0.42,
+        distance_source="depth",
+    )
+    assert obs.distance_m == 0.42
+    assert obs.distance_source == "depth"

@@ -21,6 +21,10 @@ class SceneObservation:
     distance: Optional[Distance]
     should_stop: bool
     raw_answers: dict
+    # Populated only when distance came from the depth camera (Phase 5);
+    # the VLM-only path leaves the defaults.
+    distance_m: Optional[float] = None
+    distance_source: Literal["depth", "vlm"] = "vlm"
 
 
 def parse_yes_no(answer: str) -> bool:
