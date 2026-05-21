@@ -80,7 +80,7 @@ limo_vlm_agent/
 ## Tech Stack
 
 - **Agent Framework:** LangGraph (stateful agent graph with cycles, checkpointing, tool use)
-- **VLM Backbone:** Claude Vision API / GPT-4o (cloud, swappable to local PaliGemma 3B for edge)
+- **VLM Backbone:** Moondream2 (~1.8B, runs locally on the Jetson Orin Nano)
 - **Robotics Middleware:** ROS2 Foxy
 - **Hardware:** LIMO Agilex Pro with NVIDIA Jetson Orin Nano (8GB)
 - **Controller:** Proportional/PID control with safety clamping
@@ -186,8 +186,8 @@ python scripts/run_agent.py "drive to the water bottle"
 ### Phase 1 — Controller Layer
 Get the rover driving reliably from Python. Publish to `/cmd_vel`, implement `execute_command(heading, distance)` with speed clamping. Test with hardcoded commands. No AI.
 
-### Phase 2 — Vision Tool
-Write the `look()` tool. Capture camera frame, send to cloud VLM, parse spatial response (direction + rough distance). Test by manually pointing the camera at objects.
+### Phase 2 — Vision Tool ✅
+`capture_and_analyze(target)` captures a camera frame, asks a local Moondream2 VLM where the target is and how far away it is, and returns a structured `SceneObservation`. Distance uses the depth camera with a VLM fallback. Verified via `scripts/test_vision.py`.
 
 ### Phase 3 — LangGraph Agent
 Build the state graph with observe → reason → act → check nodes. Test the reasoning loop with static images before connecting to the live rover.
@@ -199,7 +199,7 @@ Connect all layers end-to-end. Tune prompts for reliable spatial descriptions. A
 
 - [x] Project architecture design
 - [ ] Phase 1: Controller layer with PID and safety clamping
-- [ ] Phase 2: Vision tool with cloud VLM integration
+- [x] Phase 2: Vision tool — `capture_and_analyze` with local Moondream2
 - [ ] Phase 3: LangGraph agent state machine
 - [ ] Phase 4: End-to-end integration and prompt tuning
 - [x] Autonomous emergency braking — lidar forward-arc velocity gate

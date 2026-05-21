@@ -7,6 +7,9 @@ Static image (any CUDA box):
 Live camera (on the rover, camera driver running):
   python scripts/test_vision.py --target "water bottle"
 
+Live camera with depth-based distance (on the rover):
+  python scripts/test_vision.py --target "water bottle" --depth
+
 Requires a CUDA GPU and the dependencies in requirements.txt.
 """
 
