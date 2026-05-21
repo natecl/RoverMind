@@ -4,6 +4,7 @@ import pytest
 
 from perception.scene_parsing import (
     SceneObservation,
+    build_observation,
     parse_direction,
     parse_distance,
     parse_yes_no,
@@ -76,3 +77,27 @@ def test_parse_direction(answer, expected):
 ])
 def test_parse_distance(answer, expected):
     assert parse_distance(answer) == expected
+
+
+def test_build_observation_found_and_close_sets_should_stop():
+    obs = build_observation("water bottle", "Yes.", "On the left.", "It is close.")
+    assert obs.found is True
+    assert obs.direction == "left"
+    assert obs.distance == "close"
+    assert obs.should_stop is True
+    assert obs.raw_answers["visible"] == "Yes."
+
+
+def test_build_observation_found_but_far_does_not_stop():
+    obs = build_observation("water bottle", "Yes.", "On the right.", "Far away.")
+    assert obs.found is True
+    assert obs.distance == "far"
+    assert obs.should_stop is False
+
+
+def test_build_observation_not_found_zeroes_fields():
+    obs = build_observation("water bottle", "No.", "", "")
+    assert obs.found is False
+    assert obs.direction is None
+    assert obs.distance is None
+    assert obs.should_stop is False

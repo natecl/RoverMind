@@ -71,3 +71,35 @@ def parse_distance(answer: str) -> Optional[Distance]:
     if len(matches) == 1:
         return matches[0]
     return None
+
+
+def build_observation(
+    target: str,
+    visible_answer: str,
+    direction_answer: str,
+    distance_answer: str,
+) -> SceneObservation:
+    """Assemble a SceneObservation from three raw Moondream2 answers.
+
+    `should_stop` is derived here (found and distance == "close"), never asked
+    of the VLM. When the target is not found, direction/distance are None and
+    should_stop is False.
+    """
+    raw_answers = {
+        "visible": visible_answer,
+        "direction": direction_answer,
+        "distance": distance_answer,
+    }
+    found = parse_yes_no(visible_answer)
+    if not found:
+        return SceneObservation(
+            target=target, found=False, direction=None, distance=None,
+            should_stop=False, raw_answers=raw_answers,
+        )
+    direction = parse_direction(direction_answer)
+    distance = parse_distance(distance_answer)
+    should_stop = distance == "close"
+    return SceneObservation(
+        target=target, found=True, direction=direction, distance=distance,
+        should_stop=should_stop, raw_answers=raw_answers,
+    )
