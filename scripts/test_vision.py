@@ -18,7 +18,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from perception.moondream_client import MoondreamClient  # noqa: E402
-from perception.vision_tool import capture_and_analyze, ros_capture_fn  # noqa: E402
+from perception.vision_tool import (  # noqa: E402
+    capture_and_analyze, ros_capture_fn, ros_depth_capture_fn,
+)
 
 
 def main() -> int:
@@ -27,6 +29,10 @@ def main() -> int:
     parser.add_argument(
         "--image", default=None,
         help="path to an image file; omit to capture live from the camera",
+    )
+    parser.add_argument(
+        "--depth", action="store_true",
+        help="read distance from the depth camera instead of the VLM",
     )
     args = parser.parse_args()
 
@@ -40,8 +46,10 @@ def main() -> int:
     else:
         capture_fn = ros_capture_fn
 
+    depth_fn = ros_depth_capture_fn if args.depth else None
     observation = capture_and_analyze(
         args.target, capture_fn=capture_fn, moondream=moondream,
+        depth_fn=depth_fn,
     )
     print(observation)
     return 0

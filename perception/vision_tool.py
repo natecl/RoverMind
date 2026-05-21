@@ -94,3 +94,44 @@ def ros_capture_fn(topic: str = "/camera/color/image_raw",
     finally:
         node.destroy_node()
         rclpy.shutdown()
+
+
+def ros_depth_capture_fn(topic: str = "/camera/depth/image_raw",
+                         timeout_s: float = 5.0):
+    """Grab one depth frame as a height x width grid of millimetres.
+
+    Hardware-only: needs a sourced ROS2 environment. Raises FrameCaptureError
+    if no frame arrives within `timeout_s`. The depth topic must be registered
+    (aligned) to the colour image so a colour-image point indexes the same
+    pixel in the depth image.
+    """
+    import time
+
+    import rclpy
+    from cv_bridge import CvBridge
+    from rclpy.node import Node
+    from sensor_msgs.msg import Image as RosImage
+
+    rclpy.init()
+    node = Node("vision_tool_depth_capture")
+    bridge = CvBridge()
+    received = {}
+
+    def _on_depth(msg):
+        received["msg"] = msg
+
+    node.create_subscription(RosImage, topic, _on_depth, 10)
+    try:
+        deadline = time.monotonic() + timeout_s
+        while "msg" not in received and time.monotonic() < deadline:
+            rclpy.spin_once(node, timeout_sec=0.1)
+        if "msg" not in received:
+            raise FrameCaptureError(
+                f"no depth frame on {topic} within {timeout_s:.1f}s"
+            )
+        # passthrough keeps the raw 16-bit millimetre values.
+        depth = bridge.imgmsg_to_cv2(received["msg"], desired_encoding="passthrough")
+        return depth
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()

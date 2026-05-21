@@ -26,3 +26,12 @@ class MoondreamClient:
         """Ask one free-form question about `image`; return the answer string."""
         result = self._model.query(image, question)
         return result["answer"]
+
+    def point(self, image, target: str):
+        """Locate `target`; return its normalised (x, y) in [0, 1], or None."""
+        result = self._model.point(image, target)
+        points = result.get("points", [])
+        if not points:
+            return None
+        first = points[0]
+        return (first["x"], first["y"])
