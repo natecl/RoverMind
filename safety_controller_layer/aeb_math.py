@@ -38,3 +38,16 @@ def gate_twist(
     if braking and linear_x > 0.0:
         return (0.0, angular_z)
     return (linear_x, angular_z)
+
+
+class BrakeStateMachine:
+    """Maps forward obstacle distance to a brake flag (trip half only)."""
+
+    def __init__(self, params: AebParams) -> None:
+        self.params = params
+        self.braking = False
+
+    def update(self, min_range: float, now: float) -> bool:
+        if min_range < self.params.trigger_distance_m:
+            self.braking = True
+        return self.braking

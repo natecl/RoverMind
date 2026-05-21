@@ -40,3 +40,23 @@ def test_gate_twist_passes_reverse_when_braking():
 
 def test_gate_twist_passes_everything_when_not_braking():
     assert gate_twist(0.3, 0.5, braking=False) == (0.3, 0.5)
+
+
+from safety_controller_layer.aeb_math import BrakeStateMachine
+
+
+def test_brake_state_machine_starts_not_braking():
+    sm = BrakeStateMachine(AebParams())
+    assert sm.braking is False
+
+
+def test_brake_state_machine_trips_below_trigger_distance():
+    sm = BrakeStateMachine(AebParams())
+    assert sm.update(min_range=0.30, now=0.0) is True
+    assert sm.braking is True
+
+
+def test_brake_state_machine_stays_clear_above_trigger_distance():
+    sm = BrakeStateMachine(AebParams())
+    assert sm.update(min_range=1.0, now=0.0) is False
+    assert sm.braking is False
