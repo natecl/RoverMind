@@ -27,9 +27,16 @@ The system uses a **two-layer hybrid architecture**: a VLM agent loop handles hi
 ┌──────────────────────────────────────┐
 │     Real-Time Controller (ROS2)      │
 │     PID · speed clamping · safety    │
-│     Publishes /cmd_vel @ 10-30Hz     │
+│   Publishes /cmd_vel_raw @ 10-30Hz   │
 └──────────────────────────────────────┘
-               │
+               │  /cmd_vel_raw
+               ▼
+┌──────────────────────────────────────┐
+│    Emergency Braking Gate (ROS2)     │
+│   lidar /scan · forward-arc check    │
+│  zeroes forward speed · pub /cmd_vel │
+└──────────────────────────────────────┘
+               │  /cmd_vel
                ▼
           LIMO Pro Rover
 ```
@@ -142,7 +149,9 @@ Edit `config/params.yaml` to match your setup:
 ```yaml
 topics:
   rgb_image: "/camera/color/image_raw"
-  cmd_vel: "/cmd_vel"
+  scan: "/scan"                 # 2D lidar, watched by the emergency braking gate
+  cmd_vel_raw: "/cmd_vel_raw"   # controller output, into the braking gate
+  cmd_vel: "/cmd_vel"           # braking gate output, to the LIMO base driver
 
 controller:
   max_linear_speed: 0.3       # m/s — do not exceed for indoor use
@@ -165,7 +174,10 @@ ros2 launch limo_bringup limo_start.launch.py
 # Terminal 2 — start the controller node
 ros2 run limo_vlm_agent controller_node
 
-# Terminal 3 — start the agent
+# Terminal 3 — start the emergency braking gate (sole publisher of /cmd_vel)
+ros2 run safety_controller_layer aeb_node
+
+# Terminal 4 — start the agent
 python scripts/run_agent.py "drive to the water bottle"
 ```
 
@@ -190,6 +202,7 @@ Connect all layers end-to-end. Tune prompts for reliable spatial descriptions. A
 - [ ] Phase 2: Vision tool with cloud VLM integration
 - [ ] Phase 3: LangGraph agent state machine
 - [ ] Phase 4: End-to-end integration and prompt tuning
+- [x] Autonomous emergency braking — lidar forward-arc velocity gate
 - [ ] Obstacle awareness via LIMO Pro's onboard lidar
 - [ ] Multi-step task execution ("go to X, then come back")
 - [ ] Edge deployment — swap cloud VLM for local PaliGemma 3B on Orin
