@@ -70,3 +70,28 @@ class BrakeStateMachine:
                 # dead band: trigger_distance_m <= min_range <= release_distance_m
                 self._clear_since = None
         return self.braking
+
+
+def min_forward_range(
+    ranges: Sequence[float],
+    angle_min: float,
+    angle_increment: float,
+    range_min: float,
+    arc_half_width_rad: float,
+) -> float:
+    """Nearest valid obstacle distance within the forward arc.
+
+    Forward is 0 rad. A beam counts when its angle (normalised to [-pi, pi))
+    falls within +/- arc_half_width_rad. A reading counts when it is finite and
+    at least range_min. Returns inf when no valid in-arc reading exists.
+    """
+    nearest = math.inf
+    for i, r in enumerate(ranges):
+        angle = wrap_angle(angle_min + i * angle_increment)
+        if abs(angle) > arc_half_width_rad:
+            continue
+        if not math.isfinite(r) or r < range_min:
+            continue
+        if r < nearest:
+            nearest = r
+    return nearest
