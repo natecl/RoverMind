@@ -41,13 +41,32 @@ def gate_twist(
 
 
 class BrakeStateMachine:
-    """Maps forward obstacle distance to a brake flag (trip half only)."""
+    """Hysteresis state machine: maps forward obstacle distance to a brake flag.
+
+    Braking trips when the nearest obstacle is closer than trigger_distance_m.
+    It releases only after the path stays clear beyond release_distance_m for
+    release_dwell_s continuously -- the gap between the two distances is a dead
+    band that prevents on/off chatter.
+    """
 
     def __init__(self, params: AebParams) -> None:
         self.params = params
         self.braking = False
+        self._clear_since: Optional[float] = None
 
     def update(self, min_range: float, now: float) -> bool:
-        if min_range < self.params.trigger_distance_m:
+        params = self.params
+        if min_range < params.trigger_distance_m:
             self.braking = True
+            self._clear_since = None
+        elif self.braking:
+            if min_range > params.release_distance_m:
+                if self._clear_since is None:
+                    self._clear_since = now
+                elif now - self._clear_since >= params.release_dwell_s:
+                    self.braking = False
+                    self._clear_since = None
+            else:
+                # dead band: trigger_distance_m <= min_range <= release_distance_m
+                self._clear_since = None
         return self.braking
