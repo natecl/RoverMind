@@ -37,3 +37,18 @@ def test_capture_and_analyze_propagates_capture_error():
         capture_and_analyze(
             "water bottle", capture_fn=boom, moondream=FakeMoondream([]),
         )
+
+
+def test_capture_and_analyze_not_visible_skips_followup_questions():
+    moondream = FakeMoondream(["No, there is no bottle.", "UNUSED", "UNUSED"])
+    obs = capture_and_analyze(
+        "water bottle",
+        capture_fn=lambda: "FAKE_IMAGE",
+        moondream=moondream,
+    )
+    assert obs.found is False
+    assert obs.direction is None
+    assert obs.distance is None
+    assert obs.should_stop is False
+    # The direction/distance questions must NOT be asked when not visible.
+    assert len(moondream.questions) == 1

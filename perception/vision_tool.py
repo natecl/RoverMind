@@ -22,10 +22,13 @@ def capture_and_analyze(target, *, capture_fn, moondream):
     """Capture one frame, ask Moondream2 about `target`, return a SceneObservation.
 
     `capture_fn()` returns an image (or raises FrameCaptureError). `moondream`
-    is an object with `ask(image, question) -> str`.
+    is an object with `ask(image, question) -> str`. When the target is not
+    visible, the direction/distance questions are skipped.
     """
     image = capture_fn()
     visible_answer = moondream.ask(image, _VISIBLE_Q.format(target=target))
+    if not parse_yes_no(visible_answer):
+        return build_observation(target, visible_answer, "", "")
     direction_answer = moondream.ask(image, _DIRECTION_Q.format(target=target))
     distance_answer = moondream.ask(image, _DISTANCE_Q.format(target=target))
     return build_observation(
