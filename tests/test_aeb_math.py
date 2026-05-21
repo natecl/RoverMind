@@ -189,3 +189,32 @@ def test_min_forward_range_handles_arc_straddling_zero():
         range_min=0.05, arc_half_width_rad=math.radians(50),
     )
     assert result == 0.7
+
+
+def test_phase2_full_pipeline_brakes_on_lidar_obstacle():
+    """End-to-end Phase 2 slice: a raw scan's ranges feed min_forward_range,
+    whose output drives the state machine and gates the twist."""
+    params = AebParams()
+    sm = BrakeStateMachine(params)
+    arc_half = math.radians(params.forward_arc_deg / 2.0)
+    forward_cmd = (0.3, 0.0)
+
+    # Scan with a clear forward arc (3 beams at -20, 0, +20 deg) -> command passes.
+    clear_ranges = [3.0, 3.0, 3.0]
+    min_range = min_forward_range(
+        clear_ranges, angle_min=-math.radians(20),
+        angle_increment=math.radians(20), range_min=0.05,
+        arc_half_width_rad=arc_half,
+    )
+    braking = sm.update(min_range, now=0.0)
+    assert gate_twist(*forward_cmd, braking=braking) == (0.3, 0.0)
+
+    # Scan with an obstacle 0.25 m dead ahead -> forward zeroed.
+    blocked_ranges = [3.0, 0.25, 3.0]
+    min_range = min_forward_range(
+        blocked_ranges, angle_min=-math.radians(20),
+        angle_increment=math.radians(20), range_min=0.05,
+        arc_half_width_rad=arc_half,
+    )
+    braking = sm.update(min_range, now=0.1)
+    assert gate_twist(*forward_cmd, braking=braking) == (0.0, 0.0)
