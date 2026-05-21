@@ -2,7 +2,7 @@
 
 These exercise the full ROS2 stack: the safety_controller_node executable runs
 as a real launched process, a FakeRover node closes the control loop by
-integrating /cmd_vel into /imu and /odom, and an action client drives a goal
+integrating /cmd_vel_raw into /imu and /odom, and an action client drives a goal
 end-to-end and asserts on the result and feedback.
 
 Runnable only inside a built + sourced ROS2 workspace:
@@ -56,7 +56,7 @@ def generate_test_description():
 
 
 class FakeRover(Node):
-    """Closes the control loop: integrates /cmd_vel into yaw + position and
+    """Closes the control loop: integrates /cmd_vel_raw into yaw + position and
     republishes them as /imu and /odom at 50 Hz, giving the node's controller
     live sensor feedback to converge against."""
 
