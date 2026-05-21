@@ -53,3 +53,21 @@ def parse_direction(answer: str) -> Optional[Direction]:
     if len(matches) == 1:
         return matches[0]
     return None
+
+
+def parse_distance(answer: str) -> Optional[Distance]:
+    """Map a distance answer to close/medium/far.
+
+    Accepts synonyms: 'near' -> close; 'moderate' -> medium; 'distant' -> far.
+    If the answer names more than one bucket, or none, it returns None.
+    """
+    text = answer.lower()
+    present = {
+        "close": ("close" in text or "near" in text),
+        "medium": ("medium" in text or "moderate" in text),
+        "far": ("far" in text or "distant" in text),
+    }
+    matches = [name for name, found in present.items() if found]
+    if len(matches) == 1:
+        return matches[0]
+    return None

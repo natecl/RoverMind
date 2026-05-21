@@ -2,7 +2,12 @@ import dataclasses
 
 import pytest
 
-from perception.scene_parsing import SceneObservation, parse_direction, parse_yes_no
+from perception.scene_parsing import (
+    SceneObservation,
+    parse_direction,
+    parse_distance,
+    parse_yes_no,
+)
 
 
 def test_scene_observation_holds_all_fields():
@@ -57,3 +62,17 @@ def test_parse_yes_no(answer, expected):
 ])
 def test_parse_direction(answer, expected):
     assert parse_direction(answer) == expected
+
+
+@pytest.mark.parametrize("answer,expected", [
+    ("It is close.", "close"),
+    ("The bottle is near the rover.", "close"),
+    ("At a medium distance.", "medium"),
+    ("It is a moderate distance away.", "medium"),
+    ("Far away.", "far"),
+    ("It looks distant.", "far"),
+    ("It is hard to tell if it is close or far.", None),  # ambiguous -> None
+    ("", None),
+])
+def test_parse_distance(answer, expected):
+    assert parse_distance(answer) == expected
