@@ -126,3 +126,66 @@ def test_phase1_brake_and_release_scenario():
     # After the dwell, brake releases and forward motion resumes.
     braking = sm.update(min_range=0.80, now=0.7)
     assert gate_twist(*forward_cmd, braking=braking) == (0.3, 0.0)
+
+
+from safety_controller_layer.aeb_math import min_forward_range
+
+
+def test_min_forward_range_finds_forward_obstacle():
+    # 5 beams at -90, -45, 0, +45, +90 deg; only the 0 deg beam is in the arc
+    ranges = [5.0, 5.0, 0.8, 5.0, 5.0]
+    result = min_forward_range(
+        ranges, angle_min=-math.pi / 2, angle_increment=math.pi / 4,
+        range_min=0.05, arc_half_width_rad=math.radians(30),
+    )
+    assert result == 0.8
+
+
+def test_min_forward_range_ignores_obstacle_outside_arc():
+    # close obstacle at +45 deg, outside the +/-30 deg arc
+    ranges = [5.0, 5.0, 5.0, 0.3, 5.0]
+    result = min_forward_range(
+        ranges, angle_min=-math.pi / 2, angle_increment=math.pi / 4,
+        range_min=0.05, arc_half_width_rad=math.radians(30),
+    )
+    assert result == 5.0
+
+
+def test_min_forward_range_filters_invalid_readings():
+    # in-arc beams at -20, 0, +20 deg read inf, 0.0, 1.2 -> only 1.2 is valid
+    ranges = [math.nan, math.inf, 0.0, 1.2, 5.0]
+    result = min_forward_range(
+        ranges, angle_min=-math.radians(40), angle_increment=math.radians(20),
+        range_min=0.05, arc_half_width_rad=math.radians(30),
+    )
+    assert result == 1.2
+
+
+def test_min_forward_range_filters_sub_range_min_readings():
+    # 0.03 is below range_min (0.05) -> discarded; 2.0 is the answer
+    ranges = [2.0, 0.03]
+    result = min_forward_range(
+        ranges, angle_min=-math.radians(10), angle_increment=math.radians(20),
+        range_min=0.05, arc_half_width_rad=math.radians(30),
+    )
+    assert result == 2.0
+
+
+def test_min_forward_range_returns_inf_when_arc_empty():
+    # both in-arc beams invalid -> inf
+    ranges = [math.nan, math.inf]
+    result = min_forward_range(
+        ranges, angle_min=-math.radians(10), angle_increment=math.radians(20),
+        range_min=0.05, arc_half_width_rad=math.radians(30),
+    )
+    assert result == math.inf
+
+
+def test_min_forward_range_handles_arc_straddling_zero():
+    # 8 beams 45 deg apart starting at 0 rad; forward arc spans beam 0 and beam 7
+    ranges = [0.9, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 0.7]
+    result = min_forward_range(
+        ranges, angle_min=0.0, angle_increment=math.radians(45),
+        range_min=0.05, arc_half_width_rad=math.radians(50),
+    )
+    assert result == 0.7
