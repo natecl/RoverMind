@@ -152,7 +152,8 @@ def test_min_forward_range_ignores_obstacle_outside_arc():
 
 
 def test_min_forward_range_filters_invalid_readings():
-    # in-arc beams at -20, 0, +20 deg read inf, 0.0, 1.2 -> only 1.2 is valid
+    # in-arc beams (-20, 0, +20 deg) read inf, 0.0, 1.2 -> only 1.2 valid;
+    # the -40 deg NaN is excluded by the arc check, not the validity check
     ranges = [math.nan, math.inf, 0.0, 1.2, 5.0]
     result = min_forward_range(
         ranges, angle_min=-math.radians(40), angle_increment=math.radians(20),
@@ -182,7 +183,8 @@ def test_min_forward_range_returns_inf_when_arc_empty():
 
 
 def test_min_forward_range_handles_arc_straddling_zero():
-    # 8 beams 45 deg apart starting at 0 rad; forward arc spans beam 0 and beam 7
+    # 8 beams 45 deg apart from 0 rad; the +/-50 deg arc spans beams 0, 1, 7
+    # (0, 45, -45 deg) -- beam 7 wraps to -45 deg; min over them is 0.7
     ranges = [0.9, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 0.7]
     result = min_forward_range(
         ranges, angle_min=0.0, angle_increment=math.radians(45),
