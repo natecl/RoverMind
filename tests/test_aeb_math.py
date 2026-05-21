@@ -21,3 +21,22 @@ def test_aeb_params_rejects_release_not_greater_than_trigger():
         AebParams(trigger_distance_m=0.5, release_distance_m=0.5)
     with pytest.raises(ValueError):
         AebParams(trigger_distance_m=0.5, release_distance_m=0.4)
+
+
+from safety_controller_layer.aeb_math import gate_twist
+
+
+def test_gate_twist_zeroes_forward_when_braking():
+    assert gate_twist(0.3, 0.0, braking=True) == (0.0, 0.0)
+
+
+def test_gate_twist_passes_rotation_when_braking():
+    assert gate_twist(0.0, 0.5, braking=True) == (0.0, 0.5)
+
+
+def test_gate_twist_passes_reverse_when_braking():
+    assert gate_twist(-0.2, 0.0, braking=True) == (-0.2, 0.0)
+
+
+def test_gate_twist_passes_everything_when_not_braking():
+    assert gate_twist(0.3, 0.5, braking=False) == (0.3, 0.5)
