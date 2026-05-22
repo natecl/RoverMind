@@ -1,0 +1,12 @@
+agent:
+  llm_provider: openai
+  llm_model: gpt-4o-mini
+  llm_temperature: 0.0
+  max_steps: 20
+
+actions:
+  turn_small_deg: 30.0
+  turn_large_deg: 60.0
+  search_deg: 45.0
+  forward_short_m: 0.3
+  forward_medium_m: 0.6
