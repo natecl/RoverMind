@@ -42,7 +42,14 @@ def act_node(state: Dict[str, Any], *,
       observation holder (which the look tool writes to internally).
     - `stop` sets status="arrived" and status_message=<reason>.
     - If the latest AIMessage carries no tool call, abort.
+    - If status is already non-running (e.g., reason node set to "aborted"),
+      pass through without processing.
     """
+    # If status is already set to a terminal state (e.g., reason node caught
+    # an exception), don't overwrite it.
+    if state.get("status") != "running":
+        return {"messages": []}
+
     by_name = {t.name: t for t in tool_bundle.tools}
     latest = state["messages"][-1]
     if not isinstance(latest, AIMessage) or not getattr(latest, "tool_calls", None):
