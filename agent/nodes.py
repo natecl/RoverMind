@@ -95,3 +95,20 @@ def should_continue(state: Dict[str, Any]) -> str:
     if state["status"] == "running":
         return "reason"
     return END
+
+
+def make_reason_node(llm):
+    """Factory: build a `reason` node bound to a tool-bound LLM."""
+
+    def reason(state: Dict[str, Any]) -> Dict[str, Any]:
+        try:
+            ai = llm.invoke(state["messages"])
+        except Exception as exc:
+            return {
+                "status": "aborted",
+                "status_message": f"llm error: {exc}",
+                "messages": [],
+            }
+        return {"messages": [ai]}
+
+    return reason

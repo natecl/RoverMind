@@ -176,3 +176,60 @@ def test_should_continue_returns_end_when_terminal():
     for status in ("arrived", "failed_max_steps", "aborted"):
         state = {"status": status, "step_count": 4}
         assert should_continue(state) == "__end__"
+
+
+from agent.nodes import make_reason_node
+
+
+class ScriptedLLM:
+    """Fake LLM that returns scripted AIMessages, one per call.
+
+    Records the messages it was given so tests can assert on the
+    conversation context the real LLM would see.
+    """
+
+    def __init__(self, scripted_responses):
+        self._responses = list(scripted_responses)
+        self.received: list = []
+
+    def invoke(self, messages):
+        self.received.append(list(messages))
+        if not self._responses:
+            raise AssertionError("ScriptedLLM ran out of responses")
+        return self._responses.pop(0)
+
+
+def _ai(name, args):
+    return AIMessage(
+        content="",
+        tool_calls=[{"id": f"call_{name}", "name": name, "args": args}],
+    )
+
+
+def test_reason_calls_llm_with_messages_and_appends_response():
+    llm = ScriptedLLM([_ai("look", {"target": "water bottle"})])
+    reason = make_reason_node(llm)
+    state = {
+        "messages": [HumanMessage(content="drive to the water bottle")],
+    }
+
+    out = reason(state)
+
+    assert len(llm.received) == 1
+    assert llm.received[0] == state["messages"]
+    assert len(out["messages"]) == 1
+    assert isinstance(out["messages"][0], AIMessage)
+    assert out["messages"][0].tool_calls[0]["name"] == "look"
+
+
+def test_reason_aborts_on_llm_exception():
+    class ExplodingLLM:
+        def invoke(self, messages):
+            raise RuntimeError("openai api down")
+
+    reason = make_reason_node(ExplodingLLM())
+    out = reason({"messages": [HumanMessage(content="drive to the water bottle")]})
+
+    assert out["status"] == "aborted"
+    assert "openai api down" in out["status_message"]
+    assert out["messages"] == []
