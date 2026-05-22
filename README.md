@@ -179,6 +179,7 @@ ros2 run limo_vlm_agent controller_node
 ros2 run safety_controller_layer aeb_node
 
 # Terminal 4 — start the agent
+export OPENAI_API_KEY=sk-...
 python scripts/run_agent.py "drive to the water bottle"
 ```
 
@@ -201,7 +202,7 @@ Connect all layers end-to-end. Tune prompts for reliable spatial descriptions. A
 - [x] Project architecture design
 - [ ] Phase 1: Controller layer with PID and safety clamping
 - [x] Phase 2: Vision tool — `capture_and_analyze` with local Moondream2
-- [ ] Phase 3: LangGraph agent state machine
+- [x] Phase 3: LangGraph agent state machine (OpenAI-backed ReAct loop with look/turn/forward/search/stop tools)
 - [ ] Phase 4: End-to-end integration and prompt tuning
 - [x] Autonomous emergency braking — lidar forward-arc velocity gate
 - [ ] Obstacle awareness via LIMO Pro's onboard lidar
