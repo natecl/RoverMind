@@ -5,3 +5,7 @@ torch
 transformers
 pillow
 einops
+langgraph
+langchain-core
+langchain-openai
+pyyaml

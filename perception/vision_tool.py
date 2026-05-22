@@ -71,7 +71,9 @@ def ros_capture_fn(topic: str = "/camera/color/image_raw",
     from rclpy.node import Node
     from sensor_msgs.msg import Image as RosImage
 
-    rclpy.init()
+    owned_init = not rclpy.ok()
+    if owned_init:
+        rclpy.init()
     node = Node("vision_tool_capture")
     bridge = CvBridge()
     received = {}
@@ -93,7 +95,8 @@ def ros_capture_fn(topic: str = "/camera/color/image_raw",
         return Image.fromarray(rgb)
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        if owned_init:
+            rclpy.shutdown()
 
 
 def ros_depth_capture_fn(topic: str = "/camera/depth/image_raw",
@@ -112,7 +115,9 @@ def ros_depth_capture_fn(topic: str = "/camera/depth/image_raw",
     from rclpy.node import Node
     from sensor_msgs.msg import Image as RosImage
 
-    rclpy.init()
+    owned_init = not rclpy.ok()
+    if owned_init:
+        rclpy.init()
     node = Node("vision_tool_depth_capture")
     bridge = CvBridge()
     received = {}
@@ -134,4 +139,5 @@ def ros_depth_capture_fn(topic: str = "/camera/depth/image_raw",
         return depth
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        if owned_init:
+            rclpy.shutdown()
