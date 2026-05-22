@@ -135,3 +135,44 @@ def test_act_aborts_when_latest_message_has_no_tool_call():
 
     assert out["status"] == "aborted"
     assert "no tool call" in out["status_message"]
+
+
+from agent.nodes import check_node, should_continue
+
+
+def _running_state(step_count=0, status="running"):
+    return {
+        "step_count": step_count,
+        "status": status,
+        "status_message": "",
+    }
+
+
+def test_check_increments_step_count_when_running():
+    out = check_node(_running_state(step_count=3), max_steps=20)
+    assert out["step_count"] == 4
+    assert out["status"] == "running"
+
+
+def test_check_sets_failed_max_steps_when_cap_hit():
+    out = check_node(_running_state(step_count=19), max_steps=20)
+    assert out["step_count"] == 20
+    assert out["status"] == "failed_max_steps"
+    assert "max steps" in out["status_message"]
+
+
+def test_check_passes_terminal_status_through():
+    out = check_node(_running_state(step_count=5, status="arrived"), max_steps=20)
+    assert out["status"] == "arrived"
+    assert out["step_count"] == 6  # still counts the cycle
+
+
+def test_should_continue_returns_reason_when_running():
+    state = {"status": "running", "step_count": 4}
+    assert should_continue(state) == "reason"
+
+
+def test_should_continue_returns_end_when_terminal():
+    for status in ("arrived", "failed_max_steps", "aborted"):
+        state = {"status": status, "step_count": 4}
+        assert should_continue(state) == "__end__"

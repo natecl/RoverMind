@@ -7,6 +7,7 @@ state (with `add_messages` appending message-list updates).
 from typing import Any, Dict
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langgraph.graph import END
 
 from agent.prompts import SYSTEM_PROMPT
 from agent.state import extract_target
@@ -75,3 +76,22 @@ def act_node(state: Dict[str, Any], *,
         if obs is not None:
             out["last_observation"] = obs
     return out
+
+
+def check_node(state: Dict[str, Any], *, max_steps: int) -> Dict[str, Any]:
+    """Increment step counter; enforce max-steps backstop."""
+    new_count = state["step_count"] + 1
+    if state["status"] == "running" and new_count >= max_steps:
+        return {
+            "step_count": new_count,
+            "status": "failed_max_steps",
+            "status_message": f"hit max steps ({max_steps})",
+        }
+    return {"step_count": new_count, "status": state["status"]}
+
+
+def should_continue(state: Dict[str, Any]) -> str:
+    """Conditional-edge function used after `check`."""
+    if state["status"] == "running":
+        return "reason"
+    return END
