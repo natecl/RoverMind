@@ -29,7 +29,8 @@ class RoverState(TypedDict):
 
 
 _TARGET_PATTERN = re.compile(
-    r"(?:drive\s+to|go\s+to|find|locate)\s+(?:the\s+)?(.+?)\s*[.!?]*$",
+    r"(?:drive\s+to|go\s+to|navigate\s+to|move\s+to|get\s+to|approach|find|locate)"
+    r"\s+(?:the\s+)?(.+?)\s*[.!?]*$",
     re.IGNORECASE,
 )
 

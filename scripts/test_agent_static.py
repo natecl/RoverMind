@@ -51,6 +51,11 @@ def main() -> int:
     moondream = MoondreamClient()
 
     def capture_and_analyze(target: str):
+        # depth_fn is deliberately omitted: the rehearsal frames are flat JPGs
+        # with no aligned depth stream, so the perception layer falls back to
+        # the Moondream2-only distance bucket. The live-rover script
+        # (scripts/run_agent.py) passes depth_fn=ros_depth_capture_fn so the
+        # depth camera is used in production.
         return _capture_and_analyze(
             target, capture_fn=stub_capture_fn, moondream=moondream,
         )
