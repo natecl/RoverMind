@@ -13,6 +13,22 @@ def test_extract_target_find_the_x():
     assert extract_target("find the laptop") == "laptop"
 
 
+def test_extract_target_navigate_to_the_x():
+    assert extract_target("navigate to the red chair") == "red chair"
+
+
+def test_extract_target_approach_the_x():
+    assert extract_target("approach the box") == "box"
+
+
+def test_extract_target_move_to_the_x():
+    assert extract_target("move to the water bottle") == "water bottle"
+
+
+def test_extract_target_get_to_the_x():
+    assert extract_target("get to the backpack") == "backpack"
+
+
 def test_extract_target_trailing_punctuation_stripped():
     assert extract_target("drive to the water bottle.") == "water bottle"
     assert extract_target("go to the chair!") == "chair"
