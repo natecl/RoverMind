@@ -173,9 +173,11 @@ def test_should_continue_returns_reason_when_running():
 
 
 def test_should_continue_returns_end_when_terminal():
+    from langgraph.graph import END
+
     for status in ("arrived", "failed_max_steps", "aborted"):
         state = {"status": status, "step_count": 4}
-        assert should_continue(state) == "__end__"
+        assert should_continue(state) == END
 
 
 from agent.nodes import make_reason_node
