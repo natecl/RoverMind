@@ -1,6 +1,19 @@
-from langchain_core.messages import HumanMessage, SystemMessage
+from typing import List
 
-from agent.nodes import init_node
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langgraph.graph import END
+
+from agent.command_executor import ExecuteResult
+from agent.nodes import (
+    act_node,
+    check_node,
+    init_node,
+    make_reason_node,
+    should_continue,
+)
+from agent.params import ActionParams
+from agent.tools import build_tools
+from perception.scene_parsing import SceneObservation
 
 
 def test_init_extracts_target_and_seeds_state():
@@ -25,17 +38,6 @@ def test_init_preserves_original_task_string():
     out = init_node({"task": "find the laptop please"})
     assert out["task"] == "find the laptop please"
     assert out["target"] == "laptop please"
-
-
-from typing import List
-
-from langchain_core.messages import AIMessage, ToolMessage
-
-from agent.command_executor import ExecuteResult
-from agent.nodes import act_node
-from agent.params import ActionParams
-from agent.tools import build_tools
-from perception.scene_parsing import SceneObservation
 
 
 def _fake_executor():
@@ -137,9 +139,6 @@ def test_act_aborts_when_latest_message_has_no_tool_call():
     assert "no tool call" in out["status_message"]
 
 
-from agent.nodes import check_node, should_continue
-
-
 def _running_state(step_count=0, status="running"):
     return {
         "step_count": step_count,
@@ -173,14 +172,9 @@ def test_should_continue_returns_reason_when_running():
 
 
 def test_should_continue_returns_end_when_terminal():
-    from langgraph.graph import END
-
     for status in ("arrived", "failed_max_steps", "aborted"):
         state = {"status": status, "step_count": 4}
         assert should_continue(state) == END
-
-
-from agent.nodes import make_reason_node
 
 
 class ScriptedLLM:
