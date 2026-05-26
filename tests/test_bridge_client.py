@@ -3,6 +3,7 @@ import threading
 
 import pytest
 
+from agent.command_executor import CommandExecutorError, ExecuteResult
 from bridge.client import BridgeClient
 from bridge.errors import BridgeUnreachable
 from bridge.wire import decode_frame, encode_frame
@@ -52,3 +53,48 @@ def test_connect_refused_raises_bridge_unreachable():
     s.close()
     with pytest.raises(BridgeUnreachable):
         BridgeClient(f"tcp://127.0.0.1:{port}").__enter__()
+
+
+def test_execute_command_round_trips_result(loopback_server):
+    def handler(stream):
+        req = decode_frame(stream.read)
+        assert req["method"] == "execute_command"
+        assert req["args"] == {"heading_degree": 45.0, "distance_m": 1.0}
+        stream.write(encode_frame({
+            "id": req["id"], "ok": True,
+            "result": {"success": True, "message": "completed"},
+        }))
+
+    _serve_one(loopback_server, handler)
+    host, port = loopback_server.getsockname()
+    with BridgeClient(f"tcp://{host}:{port}") as client:
+        result = client.execute_command(heading_deg=45.0, distance_m=1.0)
+    assert result == ExecuteResult(success=True, message="completed")
+
+
+def test_execute_command_validates_before_send(loopback_server):
+    # Handler asserts it is never invoked.
+    def handler(stream):
+        raise AssertionError("client should not have sent a request")
+
+    _serve_one(loopback_server, handler)
+    host, port = loopback_server.getsockname()
+    with BridgeClient(f"tcp://{host}:{port}") as client:
+        with pytest.raises(ValueError, match="distance_m must be non-negative"):
+            client.execute_command(heading_deg=0.0, distance_m=-0.5)
+
+
+def test_execute_command_maps_ros_unavailable_to_executor_error(loopback_server):
+    def handler(stream):
+        req = decode_frame(stream.read)
+        stream.write(encode_frame({
+            "id": req["id"], "ok": False,
+            "error": {"type": "ros_action_unavailable",
+                       "message": "action server 'execute_command' not available within 5.0s"},
+        }))
+
+    _serve_one(loopback_server, handler)
+    host, port = loopback_server.getsockname()
+    with BridgeClient(f"tcp://{host}:{port}") as client:
+        with pytest.raises(CommandExecutorError, match="not available"):
+            client.execute_command(heading_deg=0.0, distance_m=0.5)

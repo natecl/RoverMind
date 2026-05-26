@@ -8,6 +8,7 @@ import socket
 from typing import Optional
 from urllib.parse import urlparse
 
+from agent.command_executor import ExecuteResult, validate_command
 from bridge.errors import (
     BridgeProtocolError,
     BridgeUnreachable,
@@ -59,6 +60,15 @@ class BridgeClient:
         if not isinstance(result, str):
             raise BridgeProtocolError(f"ping returned non-string: {result!r}")
         return result
+
+    def execute_command(self, heading_deg: float, distance_m: float) -> ExecuteResult:
+        validate_command(heading_deg, distance_m)
+        result = self._call("execute_command",
+                            {"heading_degree": float(heading_deg),
+                             "distance_m": float(distance_m)})
+        if not isinstance(result, dict) or "success" not in result or "message" not in result:
+            raise BridgeProtocolError(f"malformed execute_command result: {result!r}")
+        return ExecuteResult(success=bool(result["success"]), message=str(result["message"]))
 
     def _call(self, method: str, args: dict):
         if self._stream is None:
