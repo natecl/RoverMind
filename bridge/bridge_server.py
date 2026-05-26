@@ -108,7 +108,7 @@ class BridgeServer:
         return "pong"
 
     def _execute_command(self, heading_degree: float, distance_m: float):
-        from agent.command_executor import CommandExecutorError, ExecuteResult
+        from agent.command_executor import CommandExecutorError
         if self._command_executor is None:
             # Lazy-import rclpy + construct the real executor on first call.
             from agent.command_executor import CommandExecutor
