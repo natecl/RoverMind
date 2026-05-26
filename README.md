@@ -54,30 +54,35 @@ The system uses a **two-layer hybrid architecture**: a VLM agent loop handles hi
 ## Project Structure
 
 ```
-limo_vlm_agent/
+RoverMind/
 ├── README.md
 ├── requirements.txt
 ├── config/
-│   └── params.yaml              # Tunable parameters and ROS topic names
+│   └── params.yaml                       # LLM + action-resolver tunables (loaded by the agent)
 ├── agent/
-│   ├── graph.py                 # LangGraph state machine definition
-│   ├── state.py                 # RoverState schema
-│   ├── nodes.py                 # Graph nodes: observe, reason, act, check
-│   └── tools.py                 # Agent tools: capture_and_analyze, move, stop_and_report
-├── controller/
-│   ├── controller_node.py       # ROS2 node — receives commands, publishes cmd_vel
-│   └── pid.py                   # PID controller for heading and distance
+│   ├── graph.py                          # LangGraph state machine definition
+│   ├── state.py                          # RoverState schema
+│   ├── nodes.py                          # Graph nodes: init, reason, act, check
+│   ├── tools.py                          # Agent tools: look, turn, forward, search, stop
+│   └── command_executor.py               # Sync wrapper around the ExecuteCommand ROS2 action
 ├── perception/
-│   ├── scene_parsing.py         # SceneObservation + pure answer parsers
-│   ├── depth_math.py            # depth-sample → metric distance helpers
-│   ├── moondream_client.py      # local Moondream2 VLM wrapper
-│   └── vision_tool.py           # capture_and_analyze orchestration + capture
+│   ├── scene_parsing.py                  # SceneObservation + pure answer parsers
+│   ├── depth_math.py                     # depth-sample → metric distance helpers
+│   ├── moondream_client.py               # local Moondream2 VLM wrapper
+│   └── vision_tool.py                    # capture_and_analyze orchestration + ROS capture
+├── safety_controller_layer/              # ROS2 ament_python package
+│   ├── control_math.py                   # SafetyController (pure logic, unit-tested)
+│   ├── safety_controller_node.py         # ExecuteCommand action server (rotate-then-drive)
+│   ├── aeb_math.py                       # Forward-arc brake logic (pure, unit-tested)
+│   └── aeb_node.py                       # Lidar-gated /cmd_vel_raw → /cmd_vel republisher
+├── safety_controller_layer_interfaces/   # ROS2 ament_cmake package (action definitions)
+│   └── action/ExecuteCommand.action
 ├── scripts/
-│   ├── run_agent.py             # Main entry point
-│   ├── test_controller.py       # Test controller with hardcoded commands
-│   └── test_vision.py           # Test VLM perception independently
+│   ├── run_agent.py                      # Main entry point
+│   ├── test_agent_static.py              # Agent loop against fake observations
+│   └── test_vision.py                    # Test VLM perception independently
 └── launch/
-    └── limo_vlm_agent.launch.py # ROS2 launch file
+    └── rovermind.launch.py               # Brings up safety_controller_node + aeb_node
 ```
 
 ## Tech Stack
@@ -172,26 +177,26 @@ agent:
 # Terminal 1 — start the LIMO base drivers
 ros2 launch limo_bringup limo_start.launch.py
 
-# Terminal 2 — start the controller node
-ros2 run limo_vlm_agent controller_node
+# Terminal 2 — start the RoverMind nodes (safety controller + emergency braking gate)
+ros2 launch safety_controller_layer rovermind.launch.py
 
-# Terminal 3 — start the emergency braking gate (sole publisher of /cmd_vel)
-ros2 run safety_controller_layer aeb_node
-
-# Terminal 4 — start the agent
+# Terminal 3 — start the agent
 export OPENAI_API_KEY=sk-...
 python scripts/run_agent.py "drive to the water bottle"
 ```
 
+For bring-up debugging you can skip the braking gate with
+`ros2 launch safety_controller_layer rovermind.launch.py use_aeb:=false`.
+
 ## Build Phases
 
-### Phase 1 — Controller Layer
+### Phase 1 — Controller Layer ✅
 Get the rover driving reliably from Python. Publish to `/cmd_vel`, implement `execute_command(heading, distance)` with speed clamping. Test with hardcoded commands. No AI.
 
 ### Phase 2 — Vision Tool ✅
 `capture_and_analyze(target)` captures a camera frame, asks a local Moondream2 VLM where the target is and how far away it is, and returns a structured `SceneObservation`. Distance uses the depth camera with a VLM fallback. Verified via `scripts/test_vision.py`.
 
-### Phase 3 — LangGraph Agent
+### Phase 3 — LangGraph Agent ✅
 Build the state graph with observe → reason → act → check nodes. Test the reasoning loop with static images before connecting to the live rover.
 
 ### Phase 4 — Integration & Tuning
@@ -200,7 +205,7 @@ Connect all layers end-to-end. Tune prompts for reliable spatial descriptions. A
 ## Roadmap
 
 - [x] Project architecture design
-- [ ] Phase 1: Controller layer with PID and safety clamping
+- [x] Phase 1: Controller layer with PID and safety clamping
 - [x] Phase 2: Vision tool — `capture_and_analyze` with local Moondream2
 - [x] Phase 3: LangGraph agent state machine (OpenAI-backed ReAct loop with look/turn/forward/search/stop tools)
 - [ ] Phase 4: End-to-end integration and prompt tuning

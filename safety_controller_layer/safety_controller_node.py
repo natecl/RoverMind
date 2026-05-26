@@ -153,6 +153,17 @@ class SafetyControllerNode(Node):
             )
             self.get_logger().warn(result.message)
             return result
+        # ReentrantCallbackGroup + MultiThreadedExecutor mean two execute
+        # callbacks could run concurrently. The controller invariant is one
+        # goal at a time -- the should_abort hook polls a single
+        # _active_goal_handle, so a concurrent goal would silently rebind the
+        # cancel-flag source. Reject the second goal explicitly.
+        if self._active_goal_handle is not None:
+            goal_handle.abort()
+            result.success = False
+            result.message = "rejected: another goal is already executing"
+            self.get_logger().warn(result.message)
+            return result
         self._active_goal_handle = goal_handle
         feedback = ExecuteCommand.Feedback()
         try:
