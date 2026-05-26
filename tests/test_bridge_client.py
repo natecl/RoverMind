@@ -7,6 +7,8 @@ from agent.command_executor import CommandExecutorError, ExecuteResult
 from bridge.client import BridgeClient
 from bridge.errors import BridgeUnreachable
 from bridge.wire import decode_frame, encode_frame
+from perception.scene_parsing import SceneObservation
+from perception.vision_tool import FrameCaptureError
 
 
 def _serve_one(listener, handler):
@@ -98,3 +100,44 @@ def test_execute_command_maps_ros_unavailable_to_executor_error(loopback_server)
     with BridgeClient(f"tcp://{host}:{port}") as client:
         with pytest.raises(CommandExecutorError, match="not available"):
             client.execute_command(heading_deg=0.0, distance_m=0.5)
+
+
+def test_capture_and_analyze_round_trips_scene_observation(loopback_server):
+    def handler(stream):
+        req = decode_frame(stream.read)
+        assert req["method"] == "capture_and_analyze"
+        assert req["args"] == {"target": "water bottle"}
+        stream.write(encode_frame({
+            "id": req["id"], "ok": True,
+            "result": {
+                "target": "water bottle", "found": True,
+                "direction": "left", "distance": "close",
+                "should_stop": True, "raw_answers": {"visible": "yes"},
+                "distance_m": 0.42, "distance_source": "depth",
+            },
+        }))
+
+    _serve_one(loopback_server, handler)
+    host, port = loopback_server.getsockname()
+    with BridgeClient(f"tcp://{host}:{port}") as client:
+        obs = client.capture_and_analyze("water bottle")
+    assert obs.target == "water bottle"
+    assert obs.found is True
+    assert obs.direction == "left"
+    assert obs.distance_source == "depth"
+
+
+def test_capture_and_analyze_maps_vision_error(loopback_server):
+    def handler(stream):
+        req = decode_frame(stream.read)
+        stream.write(encode_frame({
+            "id": req["id"], "ok": False,
+            "error": {"type": "vision_error",
+                       "message": "no frame on /camera/color/image_raw within 5.0s"},
+        }))
+
+    _serve_one(loopback_server, handler)
+    host, port = loopback_server.getsockname()
+    with BridgeClient(f"tcp://{host}:{port}") as client:
+        with pytest.raises(FrameCaptureError, match="no frame"):
+            client.capture_and_analyze("water bottle")

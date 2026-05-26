@@ -15,7 +15,7 @@ from bridge.errors import (
     CommandExecutorError,
     FrameCaptureError,
 )
-from bridge.wire import decode_frame, encode_frame, MalformedFrameError
+from bridge.wire import decode_frame, encode_frame, MalformedFrameError, scene_observation_from_dict
 
 
 _DEFAULT_TIMEOUT_S = 75.0  # > DEFAULT_GOAL_TIMEOUT_S in command_executor.py
@@ -69,6 +69,12 @@ class BridgeClient:
         if not isinstance(result, dict) or "success" not in result or "message" not in result:
             raise BridgeProtocolError(f"malformed execute_command result: {result!r}")
         return ExecuteResult(success=bool(result["success"]), message=str(result["message"]))
+
+    def capture_and_analyze(self, target: str):
+        result = self._call("capture_and_analyze", {"target": str(target)})
+        if not isinstance(result, dict):
+            raise BridgeProtocolError(f"malformed capture_and_analyze result: {result!r}")
+        return scene_observation_from_dict(result)
 
     def _call(self, method: str, args: dict):
         if self._stream is None:
