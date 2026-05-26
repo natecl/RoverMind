@@ -45,6 +45,7 @@ class BridgeServer:
         self.bound_port: Optional[int] = None
         self._methods = {"ping": self._ping}
         self._methods["execute_command"] = self._execute_command
+        self._methods["capture_and_analyze"] = self._capture_and_analyze
 
     def serve_forever(self) -> None:
         self._listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -119,6 +120,39 @@ class BridgeServer:
         except CommandExecutorError as exc:
             raise _BridgeError("ros_action_unavailable", str(exc)) from exc
         return {"success": bool(result.success), "message": str(result.message)}
+
+    def _capture_and_analyze(self, target: str):
+        from perception.vision_tool import FrameCaptureError, capture_and_analyze
+        from bridge.wire import scene_observation_to_dict
+
+        capture_fn = self._capture_fn
+        if capture_fn is None:
+            from perception.vision_tool import ros_capture_fn
+            capture_fn = ros_capture_fn
+            self._capture_fn = capture_fn
+
+        depth_fn = self._depth_fn
+        if depth_fn is None:
+            from perception.vision_tool import ros_depth_capture_fn
+            depth_fn = ros_depth_capture_fn
+            self._depth_fn = depth_fn
+
+        if self._moondream is None:
+            if self._moondream_factory is None:
+                from perception.moondream_client import MoondreamClient
+                self._moondream_factory = lambda: MoondreamClient(device="cuda")
+            self._moondream = self._moondream_factory()
+
+        try:
+            obs = capture_and_analyze(
+                target=target,
+                capture_fn=capture_fn,
+                moondream=self._moondream,
+                depth_fn=depth_fn,
+            )
+        except FrameCaptureError as exc:
+            raise _BridgeError("vision_error", str(exc)) from exc
+        return scene_observation_to_dict(obs)
 
 
 def _parse_bind(spec: str):
