@@ -12,6 +12,8 @@ import struct
 from dataclasses import asdict
 from typing import Callable
 
+from perception.scene_parsing import SceneObservation
+
 
 class MalformedFrameError(RuntimeError):
     """Raised when a frame's declared length doesn't match its payload, or
@@ -71,7 +73,6 @@ def scene_observation_to_dict(obs):
 
 
 def scene_observation_from_dict(payload):
-    from perception.scene_parsing import SceneObservation
     return SceneObservation(
         target=payload["target"],
         found=bool(payload["found"]),

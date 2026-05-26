@@ -1,7 +1,17 @@
+import io
 import json
 import struct
 
-from bridge.wire import encode_frame
+import pytest
+
+from bridge.wire import (
+    MalformedFrameError,
+    decode_frame,
+    encode_frame,
+    scene_observation_from_dict,
+    scene_observation_to_dict,
+)
+from perception.scene_parsing import SceneObservation
 
 
 def test_encode_frame_prefixes_length():
@@ -16,16 +26,8 @@ def test_encode_frame_prefixes_length():
 
 
 def test_encode_frame_rejects_non_serializable():
-    import pytest
     with pytest.raises(TypeError):
         encode_frame({"value": object()})
-
-
-import io
-
-import pytest
-
-from bridge.wire import decode_frame, MalformedFrameError, encode_frame
 
 
 def test_decode_frame_round_trips_encoded_payload():
