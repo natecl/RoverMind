@@ -8,7 +8,6 @@ import socket
 from typing import Optional
 from urllib.parse import urlparse
 
-from agent.command_executor import ExecuteResult, validate_command
 from bridge.errors import (
     BridgeProtocolError,
     BridgeUnreachable,
