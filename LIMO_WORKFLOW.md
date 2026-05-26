@@ -87,9 +87,11 @@ safety_controller_layer_interfaces src/safety_controller_layer_interfaces (ros.a
 ### 2a. Connect
 
 ```bash
-# On your Mac:
-ssh agilex@<LIMO_IP>             # use the IP you confirmed in step 0
+# On your Mac (use the IP you confirmed in step 0):
+ssh -L 9000:localhost:9000 agilex@<LIMO_IP>
 ```
+
+The `-L 9000:localhost:9000` flag forwards Mac-side `localhost:9000` to the rover's `127.0.0.1:9000`, where the bridge (Terminal 3 below) will listen.
 
 **The rover's `~/.bashrc` prompts on every interactive login:**
 
@@ -166,13 +168,34 @@ Expect to see:
     SafetyControllerNode up; ExecuteCommand action server ready on 'execute_command'.
 ```
 
-**Terminal 3 — the agent**
+**Terminal 3 — RoverMind Python 3.8 bridge**
 
 ```bash
-cd ~/RoverMind
-export OPENAI_API_KEY=sk-...
-python3 scripts/run_agent.py "drive to the water bottle"
+# Must source ROS + overlay first (same as 2b), then:
+python3.8 ~/RoverMind/bridge/bridge_server.py --bind 127.0.0.1:9000
 ```
+
+Expect:
+
+```
+[bridge] listening on tcp://127.0.0.1:9000
+```
+
+The bridge owns the rover's rclpy ActionClient and Moondream client. The first
+`capture_and_analyze` request loads Moondream onto the Jetson GPU (5–15 s); subsequent
+requests are sub-second.
+
+**On your Mac (separate terminal, in the Python 3.10 venv) — the agent**
+
+```bash
+cd /Users/n.chinlue/code/RoverMind
+source .venv/bin/activate
+export OPENAI_API_KEY=sk-...
+python scripts/run_agent.py "drive to the water bottle"
+```
+
+The agent talks to the bridge over the SSH tunnel from §2a. No ROS or Moondream
+is imported on the Mac side — those live behind the bridge.
 
 ### 2d. Shut down
 
@@ -197,52 +220,22 @@ What I confirmed on the rover during this setup:
       tests/test_command_executor_pure.py tests/test_params.py
       tests/test_config_loader.py` — 115 pure-logic tests pass under
       the rover's Python 3.8.
-- [ ] `scripts/run_agent.py` end-to-end — **blocked**, see Known Issues.
+- [ ] `scripts/run_agent.py` end-to-end via the new bridge workflow — pending
+      live verification on the rover (see Task 4.3 manual gate in the
+      py38-bridge plan).
 
 ---
 
 ## 4. Known issues
 
-### Python version mismatch (agent won't import yet)
+### Python version mismatch (RESOLVED 2026-05-26)
 
-The rover ships Ubuntu 20.04 with `python3 → /usr/bin/python3.8`. ROS2
-Foxy's `rclpy` is built against Python 3.8 only.
-
-But `langgraph`, `langchain-core`, and the agent's `agent/state.py`
-(which uses `typing.Annotated`) all require Python ≥3.9 — the README
-itself calls for 3.10+.
-
-Symptoms when running on Python 3.8:
-
-```text
-ERROR: Could not find a version that satisfies the requirement langgraph
-ImportError: cannot import name 'Annotated' from 'typing'
-ModuleNotFoundError: No module named 'langchain_core'
-```
-
-`/usr/bin/python3.9` exists on the rover, but installing langgraph against
-it doesn't fix the problem on its own because `rclpy` (used by
-`agent/command_executor.py` → `agent/graph.py`) is only available for
-Python 3.8 under Foxy.
-
-Options to unblock — pick one before the next bring-up:
-
-1. **Upgrade ROS to Humble** (ships with Python 3.10) — the cleanest fix
-   long-term, but requires reflashing the Jetson stack.
-2. **Two-process split** — run the LangGraph agent in a Python 3.10
-   `venv` and have it call the safety controller via the ROS2 action
-   from a thin Python 3.8 bridge. The action interface
-   (`safety_controller_layer_interfaces/action/ExecuteCommand`) already
-   exists; the bridge would just need to translate the agent's
-   `execute_command()` call into an `ActionClient` request.
-3. **Rebuild `rclpy` for Python 3.9** locally on the Jetson — possible
-   but fiddly.
-
-Until one of those is in place, the agent terminal in §2c will fail at
-import time. The ROS layer (terminals 1 and 2) is fully functional and
-can be driven manually with `ros2 action send_goal /execute_command
-safety_controller_layer_interfaces/action/ExecuteCommand ...` for
-controller bring-up.
+The agent now runs in a Python 3.10 venv on the developer's Mac and reaches
+the rover's rclpy + Moondream via the Python 3.8 bridge at
+`bridge/bridge_server.py`. See §2 for the every-session workflow. The bridge
+exposes JSON-RPC over an SSH-tunneled TCP socket (`-L 9000:localhost:9000`)
+and re-uses `agent/command_executor.py` and `perception/vision_tool.py`
+unchanged.
 
 ### `colcon` can't discover both ROS packages from the repo root
 
