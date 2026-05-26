@@ -9,6 +9,7 @@ pulling in rclpy or torch.
 
 import json
 import struct
+from dataclasses import asdict
 from typing import Callable
 
 
@@ -58,3 +59,26 @@ def _read_exactly(read: Callable[[int], bytes], n: int):
             return None
         buf.extend(chunk)
     return bytes(buf)
+
+
+def scene_observation_to_dict(obs):
+    """Serialize SceneObservation to a JSON-safe dict (just dataclasses.asdict).
+
+    Kept here so the wire format is owned by one module; SceneObservation
+    itself stays a pure dataclass with no JSON awareness.
+    """
+    return asdict(obs)
+
+
+def scene_observation_from_dict(payload):
+    from perception.scene_parsing import SceneObservation
+    return SceneObservation(
+        target=payload["target"],
+        found=bool(payload["found"]),
+        direction=payload.get("direction"),
+        distance=payload.get("distance"),
+        should_stop=bool(payload["should_stop"]),
+        raw_answers=dict(payload.get("raw_answers", {})),
+        distance_m=payload.get("distance_m"),
+        distance_source=payload.get("distance_source", "vlm"),
+    )

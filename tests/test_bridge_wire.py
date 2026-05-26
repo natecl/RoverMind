@@ -67,3 +67,33 @@ def test_decode_frame_handles_short_reads():
         return src.read(1)  # at most 1 byte per call, regardless of n
 
     assert decode_frame(short_read) == {"id": 99, "method": "ping", "args": {}}
+
+
+from perception.scene_parsing import SceneObservation
+
+from bridge.wire import scene_observation_to_dict, scene_observation_from_dict
+
+
+def test_scene_observation_round_trips_through_dict():
+    obs = SceneObservation(
+        target="water bottle", found=True,
+        direction="left", distance="close", should_stop=True,
+        raw_answers={"visible": "yes", "direction": "left"},
+        distance_m=0.42, distance_source="depth",
+    )
+    payload = scene_observation_to_dict(obs)
+    assert payload == {
+        "target": "water bottle", "found": True,
+        "direction": "left", "distance": "close",
+        "should_stop": True,
+        "raw_answers": {"visible": "yes", "direction": "left"},
+        "distance_m": 0.42, "distance_source": "depth",
+    }
+    assert scene_observation_from_dict(payload) == obs
+
+
+def test_scene_observation_round_trips_with_nulls():
+    obs = SceneObservation(target="cup", found=False,
+                           direction=None, distance=None, should_stop=False,
+                           raw_answers={})
+    assert scene_observation_from_dict(scene_observation_to_dict(obs)) == obs
