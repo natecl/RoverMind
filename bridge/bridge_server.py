@@ -17,6 +17,14 @@ from typing import Callable, Optional
 from bridge.wire import decode_frame, encode_frame, MalformedFrameError
 
 
+class _BridgeError(Exception):
+    """Internal: typed error a handler can raise to produce a structured reply."""
+    def __init__(self, type_: str, message: str):
+        super().__init__(f"{type_}: {message}")
+        self.type = type_
+        self.message = message
+
+
 class BridgeServer:
     def __init__(self,
                  host: str,
@@ -36,6 +44,7 @@ class BridgeServer:
         self._moondream = None
         self.bound_port: Optional[int] = None
         self._methods = {"ping": self._ping}
+        self._methods["execute_command"] = self._execute_command
 
     def serve_forever(self) -> None:
         self._listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -87,6 +96,9 @@ class BridgeServer:
                     "error": {"type": "unknown_method", "message": method or ""}}
         try:
             result = handler(**args)
+        except _BridgeError as exc:
+            return {"id": request_id, "ok": False,
+                    "error": {"type": exc.type, "message": exc.message}}
         except Exception as exc:
             return {"id": request_id, "ok": False,
                     "error": {"type": "internal_error", "message": f"{type(exc).__name__}: {exc}"}}
@@ -94,6 +106,19 @@ class BridgeServer:
 
     def _ping(self) -> str:
         return "pong"
+
+    def _execute_command(self, heading_degree: float, distance_m: float):
+        from agent.command_executor import CommandExecutorError, ExecuteResult
+        if self._command_executor is None:
+            # Lazy-import rclpy + construct the real executor on first call.
+            from agent.command_executor import CommandExecutor
+            self._command_executor = CommandExecutor()
+        try:
+            result = self._command_executor.execute(heading_deg=heading_degree,
+                                                    distance_m=distance_m)
+        except CommandExecutorError as exc:
+            raise _BridgeError("ros_action_unavailable", str(exc)) from exc
+        return {"success": bool(result.success), "message": str(result.message)}
 
 
 def _parse_bind(spec: str):
