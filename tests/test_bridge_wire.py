@@ -53,3 +53,17 @@ def test_decode_frame_raises_on_closed_socket():
     buf = io.BytesIO(b"")
     with pytest.raises(MalformedFrameError, match="closed"):
         decode_frame(buf.read)
+
+
+def test_decode_frame_handles_short_reads():
+    """Real sockets can short-read; decode_frame must loop until n bytes or EOF.
+
+    Without the internal loop, the very first read(4) for the length header
+    would return only 1 byte and the decoder would falsely raise 'closed'.
+    """
+    src = io.BytesIO(encode_frame({"id": 99, "method": "ping", "args": {}}))
+
+    def short_read(n):
+        return src.read(1)  # at most 1 byte per call, regardless of n
+
+    assert decode_frame(short_read) == {"id": 99, "method": "ping", "args": {}}

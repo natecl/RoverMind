@@ -22,23 +22,39 @@ def encode_frame(obj: object) -> bytes:
     return struct.pack(">I", len(payload)) + payload
 
 
-def decode_frame(read_exactly: Callable[[int], bytes]) -> object:
-    """Read one frame.
+def decode_frame(read: Callable[[int], bytes]) -> object:
+    """Read one frame from `read`.
 
-    `read_exactly(n)` must return exactly n bytes or fewer if the stream
-    closed. Raises MalformedFrameError on truncation, closed stream, or
-    invalid JSON.
+    `read(n)` is a stream read function that returns up to n bytes — it may
+    short-read (e.g. socket reads do this when packets are fragmented). An
+    empty return value is treated as EOF. Raises MalformedFrameError on
+    closed stream, truncated payload, or invalid JSON.
     """
-    header = read_exactly(4)
-    if len(header) < 4:
+    header = _read_exactly(read, 4)
+    if header is None:
         raise MalformedFrameError("stream closed before length header complete")
     (length,) = struct.unpack(">I", header)
-    payload = read_exactly(length)
-    if len(payload) < length:
+    payload = _read_exactly(read, length)
+    if payload is None:
         raise MalformedFrameError(
-            f"truncated payload: declared {length} bytes, got {len(payload)}"
+            f"truncated payload: declared {length} bytes, stream closed early"
         )
     try:
         return json.loads(payload.decode("utf-8"))
     except json.JSONDecodeError as exc:
         raise MalformedFrameError(f"invalid json payload: {exc}") from exc
+
+
+def _read_exactly(read: Callable[[int], bytes], n: int):
+    """Loop `read` until n bytes received, or return None on EOF.
+
+    Necessary because Python's unbuffered SocketIO and raw socket reads can
+    return fewer bytes than requested even when the stream is still open.
+    """
+    buf = bytearray()
+    while len(buf) < n:
+        chunk = read(n - len(buf))
+        if not chunk:
+            return None
+        buf.extend(chunk)
+    return bytes(buf)
