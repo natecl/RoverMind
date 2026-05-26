@@ -19,3 +19,37 @@ def test_encode_frame_rejects_non_serializable():
     import pytest
     with pytest.raises(TypeError):
         encode_frame({"value": object()})
+
+
+import io
+
+import pytest
+
+from bridge.wire import decode_frame, MalformedFrameError, encode_frame
+
+
+def test_decode_frame_round_trips_encoded_payload():
+    obj = {"id": 42, "ok": True, "result": {"x": 1.5}}
+    buf = io.BytesIO(encode_frame(obj))
+    assert decode_frame(buf.read) == obj
+
+
+def test_decode_frame_raises_on_truncated_payload():
+    # Declare 10 bytes but provide 3.
+    buf = io.BytesIO(struct.pack(">I", 10) + b"abc")
+    with pytest.raises(MalformedFrameError, match="truncated"):
+        decode_frame(buf.read)
+
+
+def test_decode_frame_raises_on_bad_json():
+    bad = struct.pack(">I", 3) + b"{,}"
+    buf = io.BytesIO(bad)
+    with pytest.raises(MalformedFrameError, match="json"):
+        decode_frame(buf.read)
+
+
+def test_decode_frame_raises_on_closed_socket():
+    # `read` returns empty before length header is complete.
+    buf = io.BytesIO(b"")
+    with pytest.raises(MalformedFrameError, match="closed"):
+        decode_frame(buf.read)
