@@ -26,6 +26,7 @@ from agent.config_loader import load_params  # noqa: E402
 from agent.graph import build_graph  # noqa: E402
 from agent.llm import build_llm  # noqa: E402
 from bridge.client import BridgeClient  # noqa: E402
+from bridge.errors import BridgeUnreachable  # noqa: E402
 
 
 def main() -> int:
@@ -39,15 +40,22 @@ def main() -> int:
     agent_params, action_params = load_params(REPO_ROOT / "config" / "params.yaml")
     llm = build_llm(agent_params)
 
-    with BridgeClient(ns.bridge) as bridge:
-        graph = build_graph(
-            llm=llm,
-            execute_command=bridge.execute_command,
-            capture_and_analyze=bridge.capture_and_analyze,
-            agent_params=agent_params,
-            action_params=action_params,
-        )
-        final = graph.invoke({"task": task})
+    try:
+        with BridgeClient(ns.bridge) as bridge:
+            graph = build_graph(
+                llm=llm,
+                execute_command=bridge.execute_command,
+                capture_and_analyze=bridge.capture_and_analyze,
+                agent_params=agent_params,
+                action_params=action_params,
+            )
+            final = graph.invoke({"task": task})
+    except BridgeUnreachable as exc:
+        print(f"error: could not reach the bridge at {ns.bridge}: {exc}", file=sys.stderr)
+        print("hint: did you run `ssh -L 9000:localhost:9000 agilex@<rover-ip>` "
+              "and start `python3.8 bridge/bridge_server.py` on the rover?",
+              file=sys.stderr)
+        return 2
 
     print(f"\n=== Run complete ===")
     print(f"status:         {final['status']}")

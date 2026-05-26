@@ -65,3 +65,34 @@ def test_run_agent_does_not_import_rclpy_or_torch():
     finally:
         sys.modules.pop("rclpy", None)
         sys.modules.pop("torch", None)
+
+
+def test_bridge_unreachable_returns_friendly_error(monkeypatch, capsys):
+    """If BridgeClient.__enter__ raises BridgeUnreachable, main() should print
+    a clear message to stderr and return 2 (not a raw traceback)."""
+    from bridge.errors import BridgeUnreachable
+
+    mod = _import_run_agent()
+
+    def fail_to_connect(self):
+        raise BridgeUnreachable("connection refused (port 9000)")
+
+    fake_bridge_client = MagicMock(name="BridgeClient_instance")
+    fake_bridge_client.__enter__ = fail_to_connect
+    bridge_client_cls = MagicMock(return_value=fake_bridge_client)
+
+    monkeypatch.setattr(mod, "BridgeClient", bridge_client_cls)
+    monkeypatch.setattr(mod, "build_graph", MagicMock())
+    monkeypatch.setattr(mod, "build_llm", MagicMock())
+    monkeypatch.setattr(mod, "load_params",
+                        MagicMock(return_value=(MagicMock(), MagicMock())))
+    monkeypatch.setattr(sys, "argv",
+                        ["run_agent.py", "--bridge", "tcp://localhost:9000", "drive"])
+
+    rc = mod.main()
+
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "could not reach the bridge" in err
+    assert "tcp://localhost:9000" in err
+    assert "ssh -L" in err  # the hint should mention the SSH tunnel
