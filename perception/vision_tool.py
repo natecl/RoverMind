@@ -61,6 +61,12 @@ def ros_capture_fn(topic: str = "/camera/color/image_raw",
 
     Hardware-only: needs a sourced ROS2 environment. Raises FrameCaptureError
     if no frame arrives within `timeout_s`.
+
+    rclpy's context is process-global; callers (run_agent.py via CommandExecutor)
+    own its lifecycle. This function spins a transient subscription node and
+    destroys it on exit but never touches rclpy.init/shutdown -- doing so would
+    invalidate every other rclpy object in the process (e.g. the agent's
+    ActionClient).
     """
     import time
 
@@ -71,8 +77,7 @@ def ros_capture_fn(topic: str = "/camera/color/image_raw",
     from rclpy.node import Node
     from sensor_msgs.msg import Image as RosImage
 
-    owned_init = not rclpy.ok()
-    if owned_init:
+    if not rclpy.ok():
         rclpy.init()
     node = Node("vision_tool_capture")
     bridge = CvBridge()
@@ -95,8 +100,6 @@ def ros_capture_fn(topic: str = "/camera/color/image_raw",
         return Image.fromarray(rgb)
     finally:
         node.destroy_node()
-        if owned_init:
-            rclpy.shutdown()
 
 
 def ros_depth_capture_fn(topic: str = "/camera/depth/image_raw",
@@ -107,6 +110,8 @@ def ros_depth_capture_fn(topic: str = "/camera/depth/image_raw",
     if no frame arrives within `timeout_s`. The depth topic must be registered
     (aligned) to the colour image so a colour-image point indexes the same
     pixel in the depth image.
+
+    See ros_capture_fn for why this function never calls rclpy.shutdown().
     """
     import time
 
@@ -115,8 +120,7 @@ def ros_depth_capture_fn(topic: str = "/camera/depth/image_raw",
     from rclpy.node import Node
     from sensor_msgs.msg import Image as RosImage
 
-    owned_init = not rclpy.ok()
-    if owned_init:
+    if not rclpy.ok():
         rclpy.init()
     node = Node("vision_tool_depth_capture")
     bridge = CvBridge()
@@ -139,5 +143,3 @@ def ros_depth_capture_fn(topic: str = "/camera/depth/image_raw",
         return depth
     finally:
         node.destroy_node()
-        if owned_init:
-            rclpy.shutdown()

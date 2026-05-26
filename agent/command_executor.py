@@ -61,6 +61,10 @@ except ImportError:  # rclpy unavailable on dev laptop / off-rover
 
 ACTION_NAME = "execute_command"
 DEFAULT_SERVER_TIMEOUT_S = 5.0
+# Worst-case action runtime: max_timeout_s for rotate + max_timeout_s for drive
+# (each capped at 30s in ControllerParams) plus margin. Sized generously so we
+# only ever trip on a node death/hang, not on legitimately slow maneuvers.
+DEFAULT_GOAL_TIMEOUT_S = 70.0
 
 
 class CommandExecutorError(RuntimeError):
@@ -74,10 +78,17 @@ class CommandExecutor:
     until the action server returns a result and yields an `ExecuteResult`.
     Cancellation, retries, and async fan-out are intentionally not exposed —
     the LangGraph agent runs one tool call at a time.
+
+    A goal-side timeout (`goal_timeout_s`) bounds the result wait: if the
+    action server process dies after accepting a goal, the underlying future
+    never resolves; without a timeout the agent would hang forever. The
+    timeout is sized for the worst legitimate maneuver, so tripping it always
+    indicates an external failure.
     """
 
     def __init__(self, node: Optional[Node] = None,
-                 server_timeout_s: float = DEFAULT_SERVER_TIMEOUT_S):
+                 server_timeout_s: float = DEFAULT_SERVER_TIMEOUT_S,
+                 goal_timeout_s: float = DEFAULT_GOAL_TIMEOUT_S):
         if not _RCLPY_AVAILABLE:
             raise RuntimeError(
                 "rclpy is not available; CommandExecutor only works inside a sourced ROS2 environment"
@@ -88,6 +99,7 @@ class CommandExecutor:
         self._node = node or Node("rovermind_command_executor")
         self._client = ActionClient(self._node, ExecuteCommand, ACTION_NAME)
         self._server_timeout_s = server_timeout_s
+        self._goal_timeout_s = goal_timeout_s
 
     def execute(self, heading_deg: float, distance_m: float) -> ExecuteResult:
         validate_command(heading_deg, distance_m)
@@ -101,13 +113,31 @@ class CommandExecutor:
         goal.distance_m = float(distance_m)
 
         send_future = self._client.send_goal_async(goal)
-        rclpy.spin_until_future_complete(self._node, send_future)
+        rclpy.spin_until_future_complete(
+            self._node, send_future, timeout_sec=self._server_timeout_s)
+        if not send_future.done():
+            return ExecuteResult(
+                success=False,
+                message=(
+                    f"goal acceptance timed out after "
+                    f"{self._server_timeout_s:.1f}s (server unresponsive?)"
+                ),
+            )
         goal_handle = send_future.result()
         if goal_handle is None or not goal_handle.accepted:
             return ExecuteResult(success=False, message="goal rejected")
 
         result_future = goal_handle.get_result_async()
-        rclpy.spin_until_future_complete(self._node, result_future)
+        rclpy.spin_until_future_complete(
+            self._node, result_future, timeout_sec=self._goal_timeout_s)
+        if not result_future.done():
+            return ExecuteResult(
+                success=False,
+                message=(
+                    f"goal result timed out after "
+                    f"{self._goal_timeout_s:.1f}s (action server died?)"
+                ),
+            )
         wrapped = result_future.result()
         if wrapped is None:
             return ExecuteResult(success=False, message="no result returned")
