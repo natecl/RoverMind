@@ -38,6 +38,12 @@ How to get the current IP if the Mac can't reach the rover:
 
 Done on 2026-05-26. Skip this section if SSH key auth still works.
 
+> **Rover re-imaged / fresh?** If `ros2 pkg list` shows only `limo_bringup` (no
+> `safety_controller_*`) or `~/RoverMind` / `~/rovermind_ws` are missing, the
+> LIMO was re-imaged and this setup is gone. Follow
+> [`workflows/ROVER_BOOTSTRAP.md`](workflows/ROVER_BOOTSTRAP.md) to detect it and
+> rebuild from scratch (no car movement) before §2.
+
 ### 1a. Key-based SSH (from your Mac)
 
 ```bash
@@ -142,7 +148,31 @@ ros2 pkg executables safety_controller_layer
 # expect: aeb_node, safety_controller_node
 ```
 
-### 2c. Bring up the stack (three terminals — three SSH sessions)
+### 2c. Sync the repo from your Mac
+
+Develop on the Mac, then push the whole repo onto the rover before bring-up.
+Sync the **entire** tree — the bridge imports from `agent/`, `perception/`, and
+`config/`, so a partial copy of just `bridge/` would break it.
+
+```bash
+# On your Mac (use the IP you confirmed in step 0):
+rsync -av \
+  --exclude '.git' --exclude '.venv' --exclude '__pycache__' \
+  --exclude '*.pyc' --exclude '.pytest_cache' \
+  ~/code/RoverMind/ agilex@<LIMO_IP>:~/RoverMind/
+```
+
+The colcon workspace `~/rovermind_ws` symlinks into `~/RoverMind` (§1b) and was
+built with `--symlink-install`, so **Python edits are live without a rebuild**.
+Rebuild only if you changed the `ExecuteCommand` action interface or added/moved
+a package (the ament_cmake interfaces package is not symlinked):
+
+```bash
+# On the rover, only when interfaces/package structure changed:
+cd ~/rovermind_ws && colcon build --symlink-install
+```
+
+### 2d. Bring up the stack (three terminals — three SSH sessions)
 
 > **Tip:** open three SSH sessions to the rover, or use `tmux` / `screen`.
 > Each command below blocks; do not background them.
@@ -185,7 +215,58 @@ The bridge owns the rover's rclpy ActionClient and Moondream client. The first
 `capture_and_analyze` request loads Moondream onto the Jetson GPU (5–15 s); subsequent
 requests are sub-second.
 
-**On your Mac (separate terminal, in the Python 3.10 venv) — the agent**
+### 2e. Preflight checks — verify before you let it drive
+
+`run_agent.py` issues an autonomous *physical drive*, and the end-to-end path is
+still an unverified manual gate (§3). Before running it, confirm the rover has
+everything the agent needs. Run these in an SSH terminal with the overlay sourced
+(§2b), once all three terminals above are up.
+
+```bash
+# Nodes alive (expect /safety_controller and /emergency_brake)
+ros2 node list
+
+# Topics present (expect /scan /imu /odom /cmd_vel /cmd_vel_raw)
+ros2 topic list
+
+# LiDAR actually publishing -- a stale/missing /scan makes the AEB brake
+# (scan_timeout_s = 1.0s). Expect a steady rate and populated ranges.
+ros2 topic hz /scan
+ros2 topic echo /scan --once
+
+# Controller sensors -- missing /imu or /odom aborts a goal mid-maneuver
+# with a RuntimeError. Expect steady rates.
+ros2 topic hz /imu
+ros2 topic hz /odom
+
+# Action server up (expect /execute_command)
+ros2 action list
+ros2 action info /execute_command
+
+# Bridge listening on the rover (Terminal 3)
+ss -ltn | grep 9000
+```
+
+**Go / no-go safety gates** (the rover moves at up to 0.3 m/s and turns under its
+own control):
+
+- [ ] AEB is on — Terminal 2 was launched **without** `use_aeb:=false`. Never
+      smoke-test the agent with the braking gate off; it would drive blind.
+- [ ] Floor-level, open area, clear of stairs and table/ledge edges. The LiDAR
+      scans a horizontal plane and **cannot see drop-offs** — it will drive off
+      a ledge without braking.
+- [ ] Nothing within ~0.5 m of the front arc at start (AEB trips at 0.40 m), and
+      a clear path for the first maneuver. Note the AEB brakes forward motion
+      only — rotation and reverse still pass through, so it can swing into a
+      close obstacle while turning.
+- [ ] A person is ready to Ctrl-C (or lift / power-off) the rover at any moment.
+- [ ] From the Mac, the SSH tunnel (§2a) is up. The agent prints a friendly
+      error if the bridge is unreachable — a quick way to confirm the tunnel
+      before the rover moves.
+
+### 2f. Run the agent
+
+**On your Mac (separate terminal, in the Python 3.10 venv)**
 
 ```bash
 cd /Users/n.chinlue/code/RoverMind
@@ -197,7 +278,7 @@ python scripts/run_agent.py "drive to the water bottle"
 The agent talks to the bridge over the SSH tunnel from §2a. No ROS or Moondream
 is imported on the Mac side — those live behind the bridge.
 
-### 2d. Shut down
+### 2g. Shut down
 
 `Ctrl-C` each terminal in reverse order (agent → safety stack → limo
 bringup). The launch file is wired so that if either node crashes, the
