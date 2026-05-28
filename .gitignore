@@ -4,3 +4,6 @@ __pycache__/
 
 # Test / build tooling caches
 .pytest_cache/
+
+# Planning/spec docs live on disk only (see workflows/ for committed runbooks)
+docs/
