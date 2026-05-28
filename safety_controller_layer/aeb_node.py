@@ -25,6 +25,7 @@ from typing import Optional
 
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
 from geometry_msgs.msg import Twist
 from sensor_msgs.msg import LaserScan
 
@@ -56,7 +57,12 @@ class EmergencyBrakeNode(Node):
         self._was_braking = False
 
         self._cmd_pub = self.create_publisher(Twist, CMD_VEL_OUT_TOPIC, 10)
-        self.create_subscription(LaserScan, SCAN_TOPIC, self._on_scan, 10)
+        # /scan: the YDLidar publishes BEST_EFFORT (sensor-data QoS). A RELIABLE
+        # subscriber is incompatible and would receive nothing -> permanent
+        # stale-scan brake. Match it with the sensor-data profile.
+        self.create_subscription(
+            LaserScan, SCAN_TOPIC, self._on_scan, qos_profile_sensor_data
+        )
         self.create_subscription(Twist, CMD_VEL_IN_TOPIC, self._on_cmd, 10)
         self.create_timer(1.0 / self._params.output_rate_hz, self._tick)
         self.get_logger().info(
