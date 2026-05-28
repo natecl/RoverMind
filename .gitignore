@@ -7,3 +7,11 @@ __pycache__/
 
 # Planning/spec docs live on disk only (see workflows/ for committed runbooks)
 docs/
+
+# Virtualenv
+.venv/
+
+# Secrets / local env
+.env
+.env.*
+!.env.example
