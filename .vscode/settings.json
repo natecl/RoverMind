@@ -1,3 +1,6 @@
 {
-    "cmake.sourceDirectory": "/Users/n.chinlue/code/RoverMind/safety_controller_layer_interfaces"
+    "cmake.sourceDirectory": "/Users/n.chinlue/code/RoverMind/safety_controller_layer_interfaces",
+    "claudeCode.allowDangerouslySkipPermissions": true,
+    "claudeCode.useTerminal": true,
+    "claudeCode.useCtrlEnterToSend": true
 }

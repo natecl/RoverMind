@@ -22,6 +22,12 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
+# Load OPENAI_API_KEY (and any other secrets) from the gitignored .env, if present.
+# An already-exported env var still wins (override=False).
+from dotenv import load_dotenv  # noqa: E402
+
+load_dotenv(REPO_ROOT / ".env")
+
 from agent.config_loader import load_params  # noqa: E402
 from agent.graph import build_graph  # noqa: E402
 from agent.llm import build_llm  # noqa: E402
