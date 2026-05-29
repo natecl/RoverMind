@@ -57,7 +57,15 @@ def test_parse_yes_no(answer, expected):
     ("It's in the middle.", "center"),
     ("Located in the centre.", "center"),
     ("To the right.", "right"),
-    ("It could be on the left or the right.", None),  # ambiguous -> None
+    # A slight offset relative to center is still "centered" -> drive forward,
+    # not turn. If Moondream mentions middle/center, treat it as center even when
+    # it adds "slightly to the left/right" (real Moondream phrasing).
+    ("The water bottle is in the middle of the image, slightly to the "
+     "right of the center.", "center"),
+    ("It is just to the left of center.", "center"),
+    # A clear side with no center mention -> that side.
+    ("The bottle is on the right side of the image.", "right"),
+    ("It could be on the left or the right.", None),  # both sides, no center
     ("", None),
     ("I am not sure where it is.", None),
 ])
