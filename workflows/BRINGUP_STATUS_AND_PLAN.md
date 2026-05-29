@@ -102,6 +102,7 @@ ls ~/moondream2_local/.vendor_done 2>/dev/null && echo FINISHED || echo "downloa
 ```
 
 ## 6. Remaining steps after the download finishes (~2 min, needs laptop)
+Full copy-paste runbook: [`MOONDREAM_FINAL_WIRING.md`](MOONDREAM_FINAL_WIRING.md).
 Do these when the laptop can reach the rover (back on the shared hotspot):
 1. **Commit + deploy the client change**: commit `perception/moondream_client.py`
    + `tests/test_moondream_source.py`; rsync the repo to the rover (`--symlink-install`
