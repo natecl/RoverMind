@@ -44,18 +44,25 @@ def parse_yes_no(answer: str) -> bool:
 def parse_direction(answer: str) -> Optional[Direction]:
     """Map a direction answer to left/center/right.
 
-    Accepts 'middle' and 'centre' as synonyms for center. If the answer names
-    more than one direction, or none, it is ambiguous and returns None.
+    Accepts 'middle' and 'centre' as synonyms for center. A slight offset is
+    still centered: if the answer mentions middle/center it is treated as
+    "center" (drive forward) even when it adds "slightly to the left/right"
+    (Moondream often says e.g. "in the middle, slightly to the right of center").
+    Only a clear side with no center mention turns the rover; naming *both* sides
+    with no center — or no direction at all — is ambiguous and returns None.
     """
     text = answer.lower()
-    present = {
-        "left": "left" in text,
-        "center": ("center" in text or "centre" in text or "middle" in text),
-        "right": "right" in text,
-    }
-    matches = [name for name, found in present.items() if found]
-    if len(matches) == 1:
-        return matches[0]
+    left = "left" in text
+    right = "right" in text
+    center = "center" in text or "centre" in text or "middle" in text
+    if center:
+        return "center"
+    if left and right:
+        return None
+    if left:
+        return "left"
+    if right:
+        return "right"
     return None
 
 
