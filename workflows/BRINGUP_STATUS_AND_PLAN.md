@@ -93,7 +93,9 @@ in from its screen).
 - retries through drops, **stops permanently** once download+patch succeed,
   marked by `~/moondream2_local/.vendor_done`.
 
-The exact copy-paste commands are in the **Appendix** below. Status check on the
+Full standalone runbook (run on the rover's terminal):
+[`MOONDREAM_DOWNLOAD_ON_ROVER.md`](MOONDREAM_DOWNLOAD_ON_ROVER.md). The exact
+copy-paste commands are also in the **Appendix** below. Status check on the
 rover:
 ```bash
 tail -n 20 ~/moondream_fetch.log
