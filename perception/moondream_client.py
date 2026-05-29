@@ -30,12 +30,58 @@ def resolve_model_source(env=None):
     return MODEL_ID, {"revision": MODEL_REVISION}
 
 
+def _sdpa_gqa_compat(orig, query, key, value, *args, enable_gqa=False, **kwargs):
+    """Emulate ``scaled_dot_product_attention(enable_gqa=...)`` for old torch.
+
+    The ``enable_gqa`` flag (added in torch 2.5) lets SDPA broadcast fewer key/value
+    heads across more query heads (grouped-query attention). The Jetson's CUDA torch
+    is 2.1, which lacks it, so we expand the K/V head dim (-3) to match the query
+    heads -- matching torch's semantics, where query head ``h`` attends to kv head
+    ``h // (Hq // Hkv)`` -- and drop the kwarg before calling the real ``orig``.
+    """
+    if enable_gqa:
+        hq = query.shape[-3]
+        hk = key.shape[-3]
+        if hk and hq != hk:
+            n_rep = hq // hk
+            key = key.repeat_interleave(n_rep, dim=-3)
+            value = value.repeat_interleave(n_rep, dim=-3)
+    return orig(query, key, value, *args, **kwargs)
+
+
+def _install_sdpa_gqa_shim():
+    """Patch ``F.scaled_dot_product_attention`` for ``enable_gqa`` on torch < 2.5.
+
+    Moondream2's remote code passes ``enable_gqa`` (in text.py); the Jetson's torch
+    2.1 rejects it with ``TypeError``. Patching the functional in place covers every
+    call site. No-op on torch >= 2.5 (native support) and idempotent.
+    """
+    import functools
+    import torch
+    import torch.nn.functional as F
+
+    orig = getattr(F, "scaled_dot_product_attention", None)
+    if orig is None or getattr(orig, "_gqa_shimmed", False):
+        return
+    version = tuple(int(p) for p in torch.__version__.split("+")[0].split(".")[:2])
+    if version >= (2, 5):
+        return
+
+    @functools.wraps(orig)
+    def shimmed(query, key, value, *args, enable_gqa=False, **kwargs):
+        return _sdpa_gqa_compat(orig, query, key, value, *args, enable_gqa=enable_gqa, **kwargs)
+
+    shimmed._gqa_shimmed = True
+    F.scaled_dot_product_attention = shimmed
+
+
 class MoondreamClient:
     """Loads Moondream2 once and answers questions about images."""
 
     def __init__(self, device: str = "cuda"):
         from transformers import AutoModelForCausalLM
 
+        _install_sdpa_gqa_shim()
         model_ref, extra = resolve_model_source()
         self._model = AutoModelForCausalLM.from_pretrained(
             model_ref,
