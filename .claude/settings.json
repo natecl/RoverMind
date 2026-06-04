@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ \"$(jq -r '.stop_hook_active // false')\" = \"true\" ]; then exit 0; fi; test -n \"$(git status --porcelain 2>/dev/null)\" && printf '{\"decision\":\"block\",\"reason\":\"This turn left uncommitted changes \\u2014 an implementation likely just finished. Run the /learn skill NOW to capture any durable decisions, gotchas, or conventions into the context system (nearest CLAUDE.md / context/decisions ADR / memory) before stopping.\"}' || true"
+          }
+        ]
+      }
+    ]
+  }
+}

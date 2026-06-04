@@ -1,5 +1,8 @@
 # RoverMind Agent — End-to-End Workflow & Field Notes
 
+> Last verified: 2026-05-29. Rover connection identity (MAC, networks, find-the-IP) is
+> maintained in `context/ENVIRONMENT.md` — trust it over any IP mentioned here.
+
 How to bring the rover up from cold and run the autonomous agent
 ("drive to the \<target\>") through the Python 3.8 bridge. This is the
 canonical, **checked-in** companion to [`LIMO_WORKFLOW.md`](LIMO_WORKFLOW.md)
@@ -34,6 +37,10 @@ procedure plus everything learned during the first full live bring-up
 
 ## 2. Connect to the rover (the IP changes every session)
 
+> Connection identity (stable MAC, network profiles, which-network-am-I-on) is the single
+> source of truth in **`context/ENVIRONMENT.md`**. The summary below is kept for the field
+> notes; if it ever disagrees with `ENVIRONMENT.md`, that file wins.
+
 The rover is **always** MAC `54:ef:33:9e:e7:71`, user `agilex`, hostname
 `master`. There are 2–3 AgileX rovers around — do **not** use `…e7:73` or
 `…ea:7f`. Both Mac and rover must be on the **same peer-to-peer-capable
@@ -41,8 +48,10 @@ network** (a phone/Windows hotspot, typically `192.168.137.x`). A corporate/
 guest Wi-Fi with client isolation will *not* work even if both are "connected".
 
 ```bash
-# On the Mac — find the current IP by MAC:
-for i in $(seq 1 254); do ping -c1 -W300 192.168.137.$i >/dev/null 2>&1 & done; wait
+# On the Mac — easiest: discover + stamp ENVIRONMENT.md + print the tunnel cmd:
+scripts/rover_connect.sh                  # add --open to also open the SSH tunnel
+# Manual fallback (sweeps both hotspot subnets), then find the IP by MAC:
+for net in 172.20.10 192.168.137; do for i in $(seq 1 254); do ping -c1 -W300 $net.$i >/dev/null 2>&1 & done; done; wait
 arp -an | grep -i "54:ef:33:9e:e7:71"     # -> our rover's current IP
 ssh agilex@<ip> 'cat /sys/class/net/wlan0/address; ls ~/moondream2_local/.vendor_done'
 ```

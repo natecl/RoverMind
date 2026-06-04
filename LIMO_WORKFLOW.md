@@ -1,36 +1,23 @@
 # LIMO Workflow — Run RoverMind on the Rover
 
+> Last verified: 2026-05-26 (connection details superseded by `context/ENVIRONMENT.md`)
+
 How to SSH into the LIMO Agilex Pro and bring up the RoverMind stack.
 
 ---
 
-## 0. Before doing anything: ask Nathan for the current Limo IP
+## 0. Before doing anything: find the rover on the current network
 
-> **PROMPT:** "What's the Limo's IP right now? Run `hostname -I` on the rover and paste the first IP."
+The IP changes every session; **do not hardcode it.** Connection identity (the rover's
+stable MAC, the network profiles, and the arp-by-MAC discovery to get the current IP) now
+lives in one place: **`context/ENVIRONMENT.md`**. Find the IP there, then come back here for
+bring-up. `<LIMO_IP>` below means "the IP you discovered".
 
-The Limo's IP changes every session (Wi-Fi / hotspot reassignment). The
-SSH config below is only valid for one session — re-confirm before reusing.
-
-When verified on **2026-05-26**, the Limo reported:
-
-```
-$ hostname
-master
-
-$ hostname -I
-192.168.137.235  192.168.55.1  fc94:10ff:c1d1:c276:f648:dfc1:9fc1:b32d
-```
-
-- `192.168.137.235` — Wi-Fi / hotspot IP (the one to SSH to from your Mac).
-- `192.168.55.1` — Jetson's USB-Ethernet fallback (only reachable when the
-  rover is tethered to the Mac with the supplied USB cable).
-- The IPv6 is a temporary SLAAC address; ignore.
-
-How to get the current IP if the Mac can't reach the rover:
-
-1. Plug a screen + keyboard into the rover (or use the USB tether at
-   `192.168.55.1`) and run `hostname -I`.
-2. Or check the router/hotspot DHCP lease table for hostname `master`.
+Quick version: run **`scripts/rover_connect.sh`** — it finds the rover by MAC, identifies the
+active network profile, stamps `context/ENVIRONMENT.md`, and prints the tunnel command
+(`--open` also opens it). Manual fallback: `arp -an | grep -i 54:ef:33:9e:e7:71` → the rover's
+current IP (populate arp first with a subnet ping sweep if empty — see `context/ENVIRONMENT.md`).
+Confirm with `ssh agilex@<LIMO_IP> 'hostname'` → `master`.
 
 ---
 
