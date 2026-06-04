@@ -18,6 +18,11 @@ Python 3.10, no ROS/ML imports.** Hardware is reached through injected callables
   **hardware-only**). Returns `ExecuteResult`.
 - `config_loader.py` / `params.py` — load `config/params.yaml` → `AgentParams`, `ActionParams`.
 - `llm.py` — `build_llm(params)` → ChatOpenAI (needs `OPENAI_API_KEY`).
+- `latency.py` — **pure**, laptop-testable latency benchmarking. One primitive,
+  `LatencyCollector.span(category, label)` (records on the exception path too); built on it:
+  `TimingLLM` (times `reason`), `timed()` (wraps the bridge callables), `summarize()`→`Summary`
+  (console `render()` + JSON `to_dict()`). The rover's per-RPC decomposition arrives via the
+  bridge `timing` envelope — see `bridge/CLAUDE.md`.
 - `prompts.py` — `SYSTEM_PROMPT`: the tool vocabulary + strategy. **Mac-local — editing it needs
   no rover deploy.** Prefer forward progress; turn only when the target is clearly to one side.
 
@@ -26,6 +31,11 @@ Python 3.10, no ROS/ML imports.** Hardware is reached through injected callables
 `scripts/run_agent.py` builds the LLM + a `BridgeClient`, passes the client's `execute_command`
 and `capture_and_analyze` into `build_graph`, and invokes with the task. The same graph runs with
 **fakes** in tests / `scripts/test_agent_static.py`. See `context/ARCHITECTURE.md`.
+
+Latency instrumentation is injected at this **same DI seam** — run_agent wraps the LLM in
+`TimingLLM` and the two callables in `timed()`, so `graph.py`/`nodes.py`/`tools.py` stay untouched.
+Collection is always on (perf_counter is ~free); `--no-report` suppresses the print,
+`--benchmark-json PATH` dumps the full report.
 
 ## Gotchas
 

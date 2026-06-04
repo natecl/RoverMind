@@ -9,12 +9,30 @@ Run on the rover with:
     python3.8 bridge/bridge_server.py --bind 127.0.0.1:9000
 """
 
+from __future__ import annotations
+
 import argparse
 import socket
 import sys
+import time
+from contextlib import contextmanager
 from typing import Callable, Optional
 
 from bridge.wire import decode_frame, encode_frame, MalformedFrameError
+
+
+@contextmanager
+def _record_ms(target: dict, key: str):
+    """Time the wrapped block and store its duration (ms) in target[key].
+
+    Records on the exception path too, so a handler that raises mid-way still
+    reports how long the timed work took before it failed.
+    """
+    start = time.perf_counter()
+    try:
+        yield
+    finally:
+        target[key] = (time.perf_counter() - start) * 1000.0
 
 
 class _BridgeError(Exception):
@@ -43,6 +61,10 @@ class BridgeServer:
         self._moondream_factory = moondream_factory
         self._moondream = None
         self.bound_port: Optional[int] = None
+        # Per-request scratch for handler-contributed timings (action_ms, vlm_ms,
+        # ...). Reset at the top of each _handle; safe because the server is
+        # single-threaded with one request in flight.
+        self._pending_timing: dict = {}
         self._methods = {"ping": self._ping}
         self._methods["execute_command"] = self._execute_command
         self._methods["capture_and_analyze"] = self._capture_and_analyze
@@ -95,15 +117,22 @@ class BridgeServer:
         if handler is None:
             return {"id": request_id, "ok": False,
                     "error": {"type": "unknown_method", "message": method or ""}}
+        self._pending_timing = {}
+        start = time.perf_counter()
         try:
             result = handler(**args)
+            reply = {"id": request_id, "ok": True, "result": result}
         except _BridgeError as exc:
-            return {"id": request_id, "ok": False,
-                    "error": {"type": exc.type, "message": exc.message}}
+            reply = {"id": request_id, "ok": False,
+                     "error": {"type": exc.type, "message": exc.message}}
         except Exception as exc:
-            return {"id": request_id, "ok": False,
-                    "error": {"type": "internal_error", "message": f"{type(exc).__name__}: {exc}"}}
-        return {"id": request_id, "ok": True, "result": result}
+            reply = {"id": request_id, "ok": False,
+                     "error": {"type": "internal_error", "message": f"{type(exc).__name__}: {exc}"}}
+        # Attach the timing envelope (latency benchmarking). server_ms is the
+        # total handler wall-clock; handlers may have added action_ms / vlm_ms.
+        self._pending_timing["server_ms"] = (time.perf_counter() - start) * 1000.0
+        reply["timing"] = dict(self._pending_timing)
+        return reply
 
     def _ping(self) -> str:
         return "pong"
@@ -115,8 +144,9 @@ class BridgeServer:
             from agent.command_executor import CommandExecutor
             self._command_executor = CommandExecutor()
         try:
-            result = self._command_executor.execute(heading_deg=heading_degree,
-                                                    distance_m=distance_m)
+            with _record_ms(self._pending_timing, "action_ms"):
+                result = self._command_executor.execute(heading_deg=heading_degree,
+                                                        distance_m=distance_m)
         except CommandExecutorError as exc:
             raise _BridgeError("ros_action_unavailable", str(exc)) from exc
         return {"success": bool(result.success), "message": str(result.message)}
@@ -143,15 +173,21 @@ class BridgeServer:
                 self._moondream_factory = lambda: MoondreamClient(device="cuda")
             self._moondream = self._moondream_factory()
 
+        from bridge.timing import TimingMoondream
+        timed_md = TimingMoondream(self._moondream)
         try:
-            obs = capture_and_analyze(
-                target=target,
-                capture_fn=capture_fn,
-                moondream=self._moondream,
-                depth_fn=depth_fn,
-            )
+            with _record_ms(self._pending_timing, "vlm_ms"):
+                obs = capture_and_analyze(
+                    target=target,
+                    capture_fn=capture_fn,
+                    moondream=timed_md,
+                    depth_fn=depth_fn,
+                )
         except FrameCaptureError as exc:
             raise _BridgeError("vision_error", str(exc)) from exc
+        finally:
+            # Record whatever Moondream calls completed, on every path.
+            self._pending_timing["vlm"] = timed_md.aggregate()
         return scene_observation_to_dict(obs)
 
 
