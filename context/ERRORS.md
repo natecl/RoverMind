@@ -23,6 +23,17 @@ are defined in the files named below.
 - **`ControllerTimeoutError`** (`safety_controller_layer/control_math.py`) — a rotate/drive loop
   exceeded its computed timeout budget. Check `/imu` and `/odom` are actually publishing
   (a stale sensor stalls the loop), and that the path wasn't AEB-braked the whole time.
+  - **"moves but never converges" (every `rotate_to_heading`/`drive_distance` aborts, rover
+    spins/searches):** `limo_base` accepts `cmd_vel` and drives the motors (serial *write* to
+    `/dev/ttyTHS0`) but its telemetry stream is **dead** — `/odom`, `/imu`, **and `/limo_status`
+    all silent** under `ros2 topic hz` even though `limo_base` is alive and advertises them
+    (publisher count 1, QoS fine). The convergence loop polls yaw/distance from `/odom`+`/imu`,
+    never sees them change, and times out. One stale/initial `/odom` sample is enough to dodge the
+    "missing sensor" RuntimeError below, so it presents as a budget timeout, not a missing-sensor
+    abort. Diagnose with `ros2 topic hz /limo_status /odom /imu` (sourced via `rm_env.sh`); if all
+    silent it's the **base driver/hardware**, not the controller or tuning. Fix: restart
+    `limo_base`; if still silent, power-cycle the LIMO base and check the base battery (a low base
+    battery can drive-but-not-report). Field-seen 2026-06-04. See `[[project_rover_bringup_rm_env]]`.
 - **`ControllerCancelledError`** — the goal was cancelled mid-maneuver (cancel request honored
   by the action server). Expected on Ctrl-C / abort, not a bug by itself.
 - **`rclpy is not available`** (RuntimeError from `command_executor` import path) — the rover

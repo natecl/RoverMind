@@ -13,6 +13,7 @@ fails, the script falls back to pinging these known IPs for the matching MAC, ne
 <!-- ROVER_CONNECT:BEGIN -->
 | Last seen | Profile | IP | MAC |
 |-----------|---------|-----|-----|
+| 2026-06-04 | iPhone hotspot | `172.20.10.7` | `54:ef:33:9e:e7:71` |
 <!-- ROVER_CONNECT:END -->
 
 ## Rovers (stable — MAC does not change per network)
