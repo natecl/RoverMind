@@ -5,6 +5,11 @@ A hybrid agentic navigation system that enables a [LIMO Agilex Pro](https://www.
 
 The system uses a **two-layer hybrid architecture**: a VLM agent loop handles high-level perception and reasoning (~1 Hz), while a real-time controller handles low-level motor execution (~10–30 Hz). This separation ensures the rover remains safe and responsive even during the agent's multi-second reasoning steps.
 
+> **AI agents / new contributors:** start at [`CLAUDE.md`](CLAUDE.md) (orientation + golden rules),
+> then [`context/`](context/) for architecture, glossary, errors, environment, and decision records.
+> Each major module has its own `CLAUDE.md`. This README is a human-facing overview and may lag the
+> code — `context/` and the module `CLAUDE.md` files are the maintained, agent-facing source.
+
 ## Architecture
 
 ```
@@ -100,93 +105,113 @@ The LangGraph agent maintains the following state across reasoning steps:
 
 ```python
 class RoverState(TypedDict):
-    task: str                # Original natural language command
-    target_object: str       # Extracted target ("water bottle")
-    observation: str         # Latest VLM scene description
-    reasoning: str           # Agent's current reasoning
-    last_command: dict       # {"heading": float, "distance": float}
+    messages: Annotated[list[BaseMessage], add_messages]  # LLM chat history
+    task: str                # Original natural-language command
+    target: str              # Extracted target ("water bottle")
+    last_observation: Optional[SceneObservation]          # latest structured scene
     step_count: int          # Number of observe-act cycles completed
-    status: Literal["searching", "approaching", "arrived", "failed"]
+    status: Literal["running", "arrived", "failed_max_steps", "aborted"]
+    status_message: str      # Human-readable terminal detail
 ```
 
 ## Agent Tools
 
-The agent has access to three tools:
+The agent has access to five tools (built in `agent/tools.py`):
 
 | Tool | Description | Returns |
 |---|---|---|
-| `capture_and_analyze(target)` | Captures a camera frame and asks the local Moondream2 VLM where the target object is (left/center/right) and how far away it is (close/medium/far) | Structured `SceneObservation` |
-| `move(heading_degrees, distance_meters)` | Issues a high-level movement command to the controller layer. Values are clamped for safety | Confirmation string |
-| `stop_and_report(message)` | Stops the rover and terminates the agent loop | Final status message |
+| `look(target)` | Captures a camera frame and asks the local Moondream2 VLM where the target is (left/center/right) and how far (close/medium/far). Call before every move. | Formatted observation string (stores a `SceneObservation`) |
+| `turn(direction, magnitude)` | Turn in place — `direction` left/right, `magnitude` small (~30°) / large (~60°). | Confirmation string |
+| `forward(distance)` | Drive forward — `distance` short (~0.3 m) / medium (~0.6 m). | Confirmation string |
+| `search()` | Rotate ~45° in place to look for the target when `look` reports not-found. | Confirmation string |
+| `stop(reason)` | Stop the rover and end the task once centered and close. | Final status message |
+
+Magnitudes resolve to numbers via `agent/action_resolvers.py` using `config/params.yaml`.
 
 ## Setup
 
+The agent runs on **your Mac**; ROS2, Moondream2, and the bridge run **on the rover**. The two
+talk over an SSH-tunnelled TCP bridge, which lets the Mac stay on Python 3.10 (no ROS/ML imports)
+while the rover stays on its Python 3.8 ROS2 stack — see
+[`context/decisions/0002-tcp-bridge-py38-py310.md`](context/decisions/0002-tcp-bridge-py38-py310.md).
+
 ### Prerequisites
 
-- LIMO Agilex Pro with Jetson Orin Nano running JetPack 6.x
-- ROS2 Foxy installed
-- Python 3.10+
-- The Moondream2 model weights (downloaded automatically from Hugging Face on first run)
+- **Rover:** LIMO Agilex Pro with Jetson Orin Nano (8 GB, JetPack 6.x), ROS2 Foxy, Python 3.8.
+  Moondream2 weights (auto-download from Hugging Face on first run, or a local snapshot via
+  `MOONDREAM_MODEL_PATH`). No API key needed — the VLM runs locally on the Orin.
+- **Developer Mac:** Python 3.10+, an OpenAI API key, SSH access to the rover.
 
 ### Installation
 
+**On your Mac** (the agent side):
+
 ```bash
-# SSH into the LIMO Pro
-ssh agilex@<rover-ip>
+git clone https://github.com/natecl/RoverMind.git
+cd RoverMind
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env          # then put your OPENAI_API_KEY in .env (gitignored)
+```
 
-# Clone the repo
-git clone https://github.com/<your-username>/limo-vlm-agent.git
-cd limo-vlm-agent
+**On the rover** (the ROS2 + perception side — full, verified procedure in
+[`LIMO_WORKFLOW.md`](LIMO_WORKFLOW.md)):
 
-# Install Python dependencies
-pip install -r requirements.txt --break-system-packages
-
-# The Moondream2 VLM runs locally on the Orin — no API key needed.
-# Its weights download from Hugging Face on the first run.
-
-# Set the LIMO to four-wheel differential mode (simplest control)
-# (use the physical mode switch on the rover)
+```bash
+git clone https://github.com/natecl/RoverMind.git ~/RoverMind
+# Symlink the two ROS2 packages into a colcon workspace and build (LIMO_WORKFLOW.md §1):
+#   safety_controller_layer (ament_python) + safety_controller_layer_interfaces (ament_cmake)
+pip3 install -r ~/RoverMind/requirements.txt --break-system-packages
+# Set the LIMO to four-wheel differential mode via the physical mode switch.
 ```
 
 ### Configuration
 
-Edit `config/params.yaml` to match your setup:
+Edit `config/params.yaml` to tune the agent and its action magnitudes (loaded by
+`agent/config_loader.py` into `AgentParams` / `ActionParams`):
 
 ```yaml
-topics:
-  rgb_image: "/camera/color/image_raw"
-  scan: "/scan"                 # 2D lidar, watched by the emergency braking gate
-  cmd_vel_raw: "/cmd_vel_raw"   # controller output, into the braking gate
-  cmd_vel: "/cmd_vel"           # braking gate output, to the LIMO base driver
-
-controller:
-  max_linear_speed: 0.3       # m/s — do not exceed for indoor use
-  max_angular_speed: 0.5      # rad/s
-  stop_distance: 0.4          # meters from target to stop
-
 agent:
-  vlm_model: "vikhyatk/moondream2"   # local VLM, runs on the Orin
-  vlm_revision: "2025-06-21"         # pinned Moondream2 release
-  max_steps: 20               # safety limit on reasoning cycles
-  reasoning_interval: 2.0     # seconds between agent steps
+  llm_provider: openai
+  llm_model: gpt-4o-mini
+  llm_temperature: 0.0
+  max_steps: 20            # safety limit on reasoning cycles
+
+actions:
+  turn_small_deg: 30.0     # `turn(..., "small")`
+  turn_large_deg: 60.0     # `turn(..., "large")`
+  search_deg: 45.0         # `search()` rotation
+  forward_short_m: 0.3     # `forward("short")`
+  forward_medium_m: 0.6    # `forward("medium")`
 ```
+
+Controller limits (speed clamps, heading gain/tolerance) live in
+`safety_controller_layer/control_math.py` (`ControllerParams`); the emergency-brake
+distances live in `aeb_math.py` (`AebParams`). ROS topic names are fixed in the nodes.
 
 ### Running
 
+Bring up the stack **on the rover**, open the tunnel, then run the agent **on your Mac**. The
+detailed, field-verified procedure (SSH multiplexing, detached launchers, smoke gates) is in
+[`AGENT_WORKFLOW.md`](AGENT_WORKFLOW.md) and [`LIMO_WORKFLOW.md`](LIMO_WORKFLOW.md); the short version:
+
 ```bash
-# Terminal 1 — start the LIMO base drivers
-ros2 launch limo_bringup limo_start.launch.py
+# ON THE ROVER (one terminal each; source ROS2 + the overlay first):
+ros2 launch limo_bringup limo_start.launch.py                       # base + lidar + /odom /imu
+ros2 launch safety_controller_layer rovermind.launch.py            # controller + AEB (keep AEB ON)
+ros2 launch orbbec_camera dabai_dcw2.launch.py                     # camera (a SEPARATE launch)
+python3.8 ~/RoverMind/bridge/bridge_server.py --bind 127.0.0.1:9000   # the Python 3.8 bridge
 
-# Terminal 2 — start the RoverMind nodes (safety controller + emergency braking gate)
-ros2 launch safety_controller_layer rovermind.launch.py
-
-# Terminal 3 — start the agent
-export OPENAI_API_KEY=sk-...
-python scripts/run_agent.py "drive to the water bottle"
+# ON YOUR MAC:
+scripts/rover_connect.sh --open        # find the rover by MAC and open the SSH tunnel (-L 9000:localhost:9000)
+source .venv/bin/activate
+python scripts/run_agent.py "drive to the water bottle"   # OPENAI_API_KEY auto-loaded from .env
+#   add --bridge tcp://localhost:9000 to point at a non-default tunnel
 ```
 
-For bring-up debugging you can skip the braking gate with
-`ros2 launch safety_controller_layer rovermind.launch.py use_aeb:=false`.
+> ⚠️ **Always launch with AEB on** (no `use_aeb:=false`). `aeb_node` is the only thing republishing
+> `/cmd_vel_raw → /cmd_vel`, so disabling it leaves the motors with **no publisher** and the rover
+> won't move. See [`context/decisions/0003-aeb-is-the-cmd-vel-relay.md`](context/decisions/0003-aeb-is-the-cmd-vel-relay.md).
 
 ## Build Phases
 
