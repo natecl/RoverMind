@@ -43,11 +43,20 @@ def test_main_constructs_bridge_client_and_wires_callables(monkeypatch):
     rc = mod.main()
 
     assert rc == 0
-    bridge_client_cls.assert_called_once_with("tcp://localhost:9000")
-    # The two callables passed to build_graph must be the BridgeClient's methods.
+    # BridgeClient gets the URL plus a timing_sink for latency benchmarking.
+    bridge_client_cls.assert_called_once()
+    assert bridge_client_cls.call_args.args == ("tcp://localhost:9000",)
+    assert callable(bridge_client_cls.call_args.kwargs["timing_sink"])
+    # The callables passed to build_graph are latency-timing wrappers (not the
+    # raw methods), but they must still delegate to the BridgeClient's methods.
     kwargs = build_graph.call_args.kwargs
-    assert kwargs["execute_command"] is fake_client.execute_command
-    assert kwargs["capture_and_analyze"] is fake_client.capture_and_analyze
+    kwargs["execute_command"](30.0, 0.0)
+    fake_client.execute_command.assert_called_once_with(30.0, 0.0)
+    kwargs["capture_and_analyze"]("water bottle")
+    fake_client.capture_and_analyze.assert_called_once_with("water bottle")
+    # The LLM handed to build_graph is the TimingLLM proxy wrapping build_llm's output.
+    from agent.latency import TimingLLM
+    assert isinstance(kwargs["llm"], TimingLLM)
 
 
 def test_run_agent_does_not_import_rclpy_or_torch():

@@ -26,7 +26,21 @@ Lets the Mac agent (3.10) call rover functions (3.8, rclpy + Moondream) as if lo
 - A change here or to anything the server imports (`agent/command_executor.py`,
   `perception/vision_tool.py`) needs a **rover repo sync + bridge restart** to take effect.
 
+## Latency timing envelope
+
+- The server attaches `reply["timing"]` (a sibling of `result`, **not** inside the domain object)
+  to every dispatched reply: `server_ms` (total handler wall-clock) always; `action_ms`
+  (`_execute_command`) and `vlm_ms` + a per-Moondream-call `vlm` dict (`_capture_and_analyze`) when
+  those handlers run. Timings ride in the envelope so `SceneObservation`/`ExecuteResult` stay
+  timing-free. `bridge_server._pending_timing` is the per-request scratch (single-threaded → safe).
+- `BridgeClient(timing_sink=...)` measures the round-trip, reads `reply["timing"]`, and forwards
+  each value as `(method, name, ms)` plus `transport_overhead_ms = max(0, round_trip − server_ms)`.
+  **Back-compat:** an old server omits `timing`, the client records nothing — the agent path is
+  unchanged. Adding `timing` is additive: result-parsers ignore unknown envelope keys.
+- This is a **server change → rover sync + bridge restart** to take effect on hardware.
+
 ## Tests
 
 `tests/test_bridge_wire.py` (pure framing), `test_bridge_client.py` (against an in-process fake
-server), `test_bridge_server.py` (injected executor/vision), `test_run_agent_bridge_wiring.py`.
+server), `test_bridge_server.py` (injected executor/vision), `test_run_agent_bridge_wiring.py`,
+`test_bridge_server_timing.py` + `test_bridge_client_timing.py` (the timing envelope).
