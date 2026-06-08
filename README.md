@@ -10,6 +10,20 @@ The system uses a **two-layer hybrid architecture**: a VLM agent loop handles hi
 > Each major module has its own `CLAUDE.md`. This README is a human-facing overview and may lag the
 > code — `context/` and the module `CLAUDE.md` files are the maintained, agent-facing source.
 
+## Status
+
+A working research prototype, not a finished product. What's real and verified today:
+
+- **End-to-end on real hardware.** A natural-language command (*"drive to the water bottle"*) drives
+  the LIMO Pro to locate the target via the onboard VLM, approach it, and stop — demonstrated in a
+  clean live run, with autonomous emergency braking active throughout.
+- **Distance is currently qualitative.** The "stop when close" trigger uses the VLM's verbal
+  close/medium/far estimate. A depth-camera metric-distance path is implemented but not yet
+  functional (the depth stream doesn't populate — see [`context/ERRORS.md`](context/ERRORS.md)).
+- **One verified run, not a measured success rate.** The system has been driven to target end-to-end;
+  it has not yet been benchmarked for reliability across many trials.
+- **Phase 4 (integration & tuning) is in progress** — see [Build Phases](#build-phases) below.
+
 ## Architecture
 
 ```
@@ -54,7 +68,6 @@ The system uses a **two-layer hybrid architecture**: a VLM agent loop handles hi
 | Safety | LLM can output unsafe speeds | Controller clamps all outputs |
 | Determinism | Non-deterministic steering | Predictable low-level execution |
 | Debugging | Chain-of-thought log reading | PID error plots + reasoning logs |
-| Demo reliability | ~60% success rate | ~95% success rate |
 
 ## Project Structure
 
@@ -219,7 +232,7 @@ python scripts/run_agent.py "drive to the water bottle"   # OPENAI_API_KEY auto-
 Get the rover driving reliably from Python. Publish to `/cmd_vel`, implement `execute_command(heading, distance)` with speed clamping. Test with hardcoded commands. No AI.
 
 ### Phase 2 — Vision Tool ✅
-`capture_and_analyze(target)` captures a camera frame, asks a local Moondream2 VLM where the target is and how far away it is, and returns a structured `SceneObservation`. Distance uses the depth camera with a VLM fallback. Verified via `scripts/test_vision.py`.
+`capture_and_analyze(target)` captures a camera frame, asks a local Moondream2 VLM where the target is and how far away it is, and returns a structured `SceneObservation`. Distance currently uses the VLM's qualitative estimate; a depth-camera metric path is implemented but not yet functional (see [`context/ERRORS.md`](context/ERRORS.md)). Verified via `scripts/test_vision.py`.
 
 ### Phase 3 — LangGraph Agent ✅
 Build the state graph with observe → reason → act → check nodes. Test the reasoning loop with static images before connecting to the live rover.
